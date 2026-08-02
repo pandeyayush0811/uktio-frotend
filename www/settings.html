@@ -5,6 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Utkio — Settings</title>
 <link rel="stylesheet" href="shared/style.css">
+<style>
+  /* Change this one line whenever the real Telegram group link is ready. */
+  :root{ --telegram-group-url: "https://t.me/REPLACE_ME"; }
+
+  .settings-section{ margin-top:26px; }
+  .settings-section:first-of-type{ margin-top:16px; }
+  .settings-section-label{ font-size:0.7rem; font-weight:700; letter-spacing:0.5px; color:var(--ink-dim); text-transform:uppercase; margin:0 0 10px 4px; }
+  .telegram-btn{
+    width:100%; display:flex; align-items:center; gap:14px; padding:16px 18px;
+    background:var(--card); border-radius:16px; box-shadow:0 6px 18px -12px rgba(60,60,120,0.2);
+    border:none; cursor:pointer; text-decoration:none; color:var(--ink); font-family:inherit;
+  }
+  .telegram-icon{
+    width:42px; height:42px; border-radius:50%; background:#2AABEE; color:#fff; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .telegram-text-title{ font-weight:700; font-size:0.92rem; }
+  .telegram-text-sub{ font-size:0.78rem; color:var(--ink-dim); margin-top:2px; }
+</style>
 </head>
 <body>
 <div class="wrap" style="overflow-y:auto;">
@@ -16,38 +35,58 @@
     <span style="width:38px;"></span>
   </header>
 
-  <div class="drawer-section-label" style="margin-top:16px;">Account</div>
-  <div class="profile-fields-card">
-    <div class="profile-row">
-      <div class="profile-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></div>
-      <div><div class="profile-row-label">Email</div></div>
-      <div class="profile-row-right"><span class="profile-row-value" id="vEmail" style="font-size:0.85rem;">—</span></div>
+  <div class="settings-section">
+    <div class="settings-section-label">Account</div>
+    <div class="profile-fields-card">
+      <div class="profile-row">
+        <div class="profile-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></div>
+        <div><div class="profile-row-label">Email</div></div>
+        <div class="profile-row-right"><span class="profile-row-value" id="vEmail" style="font-size:0.85rem;">—</span></div>
+      </div>
     </div>
   </div>
 
-  <div class="drawer-section-label">AI Setup</div>
-  <div class="card">
-    <label for="apiKey">Google Gemini API key</label>
-    <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off">
-    <p class="hint">
-      Key sirf tumhare phone/device mein save hoti hai (kisi server pe nahi) — agli baar app khologe to dobara daalni nahi padegi. Direct Google ko jaati hai connection ke waqt.
-      Free key <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> se milegi (credit card nahi chahiye).
-      <br><br>
-      Security ke liye: <strong>logout karte hi ye key automatically device se delete ho jaati hai</strong> — agli baar login karke dobara daalni hogi.
-    </p>
-    <div class="status-msg ok" id="savedMsg" style="min-height:1.2em;"></div>
-    <button class="secondary" id="deleteKeyBtn" style="color:var(--bad);margin-top:4px;">Key delete karo</button>
-  </div>
-
-  <div class="drawer-section-label">About</div>
-  <div class="profile-fields-card" style="margin-bottom:20px;">
-    <div class="profile-row">
-      <div class="profile-row-label" style="flex:1;">App version</div>
-      <div class="profile-row-value">1.0.0</div>
+  <div class="settings-section">
+    <div class="settings-section-label">AI Setup</div>
+    <div class="card">
+      <label for="apiKey">Google Gemini API key</label>
+      <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off">
+      <p class="hint">
+        Key sirf tumhare phone/device mein save hoti hai (kisi server pe nahi) — agli baar app khologe to dobara daalni nahi padegi. Direct Google ko jaati hai connection ke waqt.
+        Free key <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> se milegi (credit card nahi chahiye).
+        <br><br>
+        Security ke liye: <strong>logout karte hi ye key automatically device se delete ho jaati hai</strong> — agli baar login karke dobara daalni hogi.
+      </p>
+      <div class="status-msg ok" id="savedMsg" style="min-height:1.2em;"></div>
+      <button class="secondary" id="deleteKeyBtn" style="color:var(--bad);margin-top:4px;">Key delete karo</button>
     </div>
   </div>
 
-  <button class="secondary" id="logoutBtn" style="color:var(--bad);margin-bottom:20px;">Logout</button>
+  <div class="settings-section">
+    <div class="settings-section-label">Help &amp; Community</div>
+    <a class="telegram-btn" id="telegramBtn" href="#" target="_blank" rel="noopener">
+      <div class="telegram-icon">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M21.9 3.7 2.7 11.3c-1.3.5-1.3 1.2-.2 1.6l4.9 1.5 1.9 5.8c.2.7.5.9 1 .9.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14.3c.3-1.3-.4-1.8-1.7-1.1zM8.4 13.7l9.5-6c.5-.3.9-.1.6.3l-8 7.4-.3 3.2-1.5-4.9z"/></svg>
+      </div>
+      <div>
+        <div class="telegram-text-title">Join our Telegram group</div>
+        <div class="telegram-text-sub">Koi bhi problem ho, seedha yahan batao</div>
+      </div>
+    </a>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-label">About</div>
+    <div class="profile-fields-card">
+      <div class="profile-row">
+        <div class="profile-row-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div>
+        <div><div class="profile-row-label">App version</div></div>
+        <div class="profile-row-right"><span class="profile-row-value">1.0.0</span></div>
+      </div>
+    </div>
+  </div>
+
+  <button class="secondary" id="logoutBtn" style="color:var(--bad);margin-top:26px;margin-bottom:20px;">Logout</button>
 </div>
 
 <script type="module">
@@ -55,6 +94,9 @@ import './shared/config.js';
 import { requireAuthOrRedirect, apiFetch, logout, API_KEY_STORAGE_KEY } from './shared/auth.js';
 
 requireAuthOrRedirect();
+
+document.getElementById('telegramBtn').href =
+  getComputedStyle(document.documentElement).getPropertyValue('--telegram-group-url').trim().replace(/^"|"$/g, '');
 
 apiFetch('/users/me').then(data => {
   document.getElementById('vEmail').textContent = data.email || '—';
