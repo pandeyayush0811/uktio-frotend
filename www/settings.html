@@ -22,32 +22,51 @@
     <p class="hint">
       Key sirf tumhare phone/device mein save hoti hai (kisi server pe nahi) — agli baar app khologe to dobara daalni nahi padegi. Direct Google ko jaati hai connection ke waqt.
       Free key <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> se milegi (credit card nahi chahiye).
+      <br><br>
+      Security ke liye: <strong>logout karte hi ye key automatically device se delete ho jaati hai</strong> — agli baar login karke dobara daalni hogi.
     </p>
     <div class="status-msg ok" id="savedMsg" style="min-height:1.2em;"></div>
+    <button class="secondary" id="deleteKeyBtn" style="color:var(--bad);margin-top:4px;">Key delete karo</button>
   </div>
 </div>
 
 <script type="module">
-const API_KEY_STORAGE_KEY = 'utkio_gemini_api_key';
+import { API_KEY_STORAGE_KEY } from './shared/auth.js';
+
 const apiKeyInput = document.getElementById('apiKey');
 const savedMsg = document.getElementById('savedMsg');
+const deleteKeyBtn = document.getElementById('deleteKeyBtn');
+
+function flashMsg(text){
+  savedMsg.textContent = text;
+  clearTimeout(flashMsg._t);
+  flashMsg._t = setTimeout(() => { savedMsg.textContent = ''; }, 1400);
+}
 
 try {
   const savedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
   if (savedKey) apiKeyInput.value = savedKey;
 } catch (e) { console.warn('localStorage read failed', e); }
 
-let saveTimer = null;
+// Typing a new key auto-saves it (overwrites any previous key).
 apiKeyInput.addEventListener('input', () => {
   try {
     const v = apiKeyInput.value.trim();
-    if (v) localStorage.setItem(API_KEY_STORAGE_KEY, v);
-    else localStorage.removeItem(API_KEY_STORAGE_KEY);
-
-    savedMsg.textContent = 'Saved';
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { savedMsg.textContent = ''; }, 1200);
+    if (v) {
+      localStorage.setItem(API_KEY_STORAGE_KEY, v);
+      flashMsg('Saved');
+    } else {
+      localStorage.removeItem(API_KEY_STORAGE_KEY);
+    }
   } catch (e) { console.warn('localStorage write failed', e); }
+});
+
+// Explicit delete — clears the field and storage, no need to select-all + backspace.
+deleteKeyBtn.addEventListener('click', () => {
+  apiKeyInput.value = '';
+  try { localStorage.removeItem(API_KEY_STORAGE_KEY); }
+  catch (e) { console.warn('localStorage remove failed', e); }
+  flashMsg('Key delete ho gayi');
 });
 </script>
 </body>

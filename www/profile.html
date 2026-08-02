@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Utkio — Profile</title>
 <link rel="stylesheet" href="shared/style.css">
+<style>
+  .wrap{ overflow-y:auto; } /* this page scrolls — it's longer than a login/onboarding card */
+  .section-label{ font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-dim); margin:22px 0 10px; }
+  .section-label:first-child{ margin-top:0; }
+  .chip-group.compact{ flex-direction:row; flex-wrap:wrap; }
+  .chip-group.compact .chip{ width:auto; }
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -13,19 +20,55 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
     </a>
     <h1 class="app-title" style="font-size:1.2rem;">Profile</h1>
-    <span style="width:38px;"></span>
+    <a class="icon-btn" href="settings.html" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </a>
   </header>
 
   <div class="card" style="margin-top:16px;">
-    <div class="status-msg" id="statusMsg">Loading...</div>
+    <div class="status-msg" id="loadingMsg">Loading...</div>
 
     <div id="profileBody" style="display:none;">
+      <div class="section-label">Account</div>
       <label>Email</label>
-      <div id="emailField" style="margin-bottom:14px;font-weight:600;"></div>
-
+      <div id="emailField" style="margin-bottom:10px;font-weight:600;"></div>
       <label>Member since</label>
-      <div id="createdField" style="margin-bottom:20px;color:var(--ink-dim);font-size:0.85rem;"></div>
+      <div id="createdField" style="margin-bottom:8px;color:var(--ink-dim);font-size:0.85rem;"></div>
 
+      <div class="section-label">Basic info</div>
+      <label for="f_name">Naam</label>
+      <input type="text" id="f_name">
+
+      <label for="f_age">Age</label>
+      <input type="text" inputmode="numeric" id="f_age">
+
+      <label>Student ya working professional?</label>
+      <div class="chip-group compact" id="f_occ"></div>
+
+      <div id="occDetailWrap">
+        <label id="occDetailLabel" for="f_occdetail">Class/course</label>
+        <input type="text" id="f_occdetail">
+      </div>
+
+      <label for="f_city">City (optional)</label>
+      <input type="text" id="f_city">
+
+      <div class="section-label">Learning preferences</div>
+      <label>English improve karne ka goal</label>
+      <div class="chip-group" id="f_goal"></div>
+
+      <label>Self-rated English level</label>
+      <div class="chip-group" id="f_level"></div>
+
+      <label>Roz kitna time practice ke liye</label>
+      <div class="chip-group" id="f_time"></div>
+
+      <label for="f_sample">Apne baare mein (English sample)</label>
+      <textarea id="f_sample" maxlength="500"></textarea>
+      <div class="char-hint" id="charHint">0 / 500</div>
+
+      <div class="status-msg" id="saveStatus"></div>
+      <button class="primary" id="saveBtn">Save changes</button>
       <button class="secondary" id="logoutBtn" style="color:var(--bad);">Logout</button>
     </div>
   </div>
@@ -37,23 +80,126 @@ import { requireAuthOrRedirect, apiFetch, logout } from './shared/auth.js';
 
 requireAuthOrRedirect();
 
-const statusMsg = document.getElementById('statusMsg');
+const GOAL_OPTIONS = [
+  { value: 'interview', label: 'Job interview / professional English' },
+  { value: 'daily_confidence', label: 'Roz ki confidence' },
+  { value: 'exam_prep', label: 'Exam prep (IELTS/TOEFL)' },
+  { value: 'travel', label: 'Travel' },
+  { value: 'content_creation', label: 'Content creation' },
+  { value: 'general', label: 'General improvement' }
+];
+const LEVEL_OPTIONS = [
+  { value: 'beginner', label: 'Beginner' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'advanced', label: 'Advanced' }
+];
+const TIME_OPTIONS = [
+  { value: '5_10', label: '5–10 min' },
+  { value: '15_20', label: '15–20 min' },
+  { value: '30_plus', label: '30+ min' }
+];
+const OCC_OPTIONS = [
+  { value: 'student', label: 'Student' },
+  { value: 'professional', label: 'Professional' }
+];
+
+let profile = {};
+
+function renderChips(container, options, currentValue, onSelect){
+  container.innerHTML = '';
+  options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip' + (currentValue === opt.value ? ' selected' : '');
+    btn.textContent = opt.label;
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+      btn.classList.add('selected');
+      onSelect(opt.value);
+    });
+    container.appendChild(btn);
+  });
+}
+
+function updateOccDetailField(){
+  const isStudent = profile.occupation_type === 'student';
+  document.getElementById('occDetailLabel').textContent = isStudent ? 'Class/course' : 'Profession/role';
+  document.getElementById('f_occdetail').value = isStudent ? (profile.class_grade || '') : (profile.profession || '');
+}
+
+const loadingMsg = document.getElementById('loadingMsg');
 const profileBody = document.getElementById('profileBody');
+const saveStatus = document.getElementById('saveStatus');
 
 (async () => {
   try {
     const data = await apiFetch('/users/me');
+    profile = data.profile || {};
+
     document.getElementById('emailField').textContent = data.email || '—';
     document.getElementById('createdField').textContent = data.created_at
-      ? new Date(data.created_at).toLocaleDateString()
-      : '—';
-    statusMsg.style.display = 'none';
+      ? new Date(data.created_at).toLocaleDateString() : '—';
+
+    document.getElementById('f_name').value = profile.name || '';
+    document.getElementById('f_age').value = profile.age || '';
+    document.getElementById('f_city').value = profile.city || '';
+    document.getElementById('f_sample').value = profile.english_sample || '';
+    document.getElementById('charHint').textContent = (profile.english_sample || '').length + ' / 500';
+
+    renderChips(document.getElementById('f_occ'), OCC_OPTIONS, profile.occupation_type, v => {
+      profile.occupation_type = v;
+      updateOccDetailField();
+    });
+    updateOccDetailField();
+
+    renderChips(document.getElementById('f_goal'), GOAL_OPTIONS, profile.goal, v => profile.goal = v);
+    renderChips(document.getElementById('f_level'), LEVEL_OPTIONS, profile.self_level, v => profile.self_level = v);
+    renderChips(document.getElementById('f_time'), TIME_OPTIONS, profile.daily_time, v => profile.daily_time = v);
+
+    document.getElementById('f_age').addEventListener('input', e => {
+      e.target.value = e.target.value.replace(/[^0-9]/g, '');
+    });
+    document.getElementById('f_sample').addEventListener('input', e => {
+      document.getElementById('charHint').textContent = e.target.value.length + ' / 500';
+    });
+
+    loadingMsg.style.display = 'none';
     profileBody.style.display = 'block';
   } catch (err) {
-    statusMsg.textContent = 'Profile load nahi ho paya: ' + err.message;
-    statusMsg.className = 'status-msg err';
+    loadingMsg.textContent = 'Profile load nahi ho paya: ' + err.message;
+    loadingMsg.className = 'status-msg err';
   }
 })();
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const isStudent = profile.occupation_type === 'student';
+  const occDetail = document.getElementById('f_occdetail').value.trim();
+
+  const payload = {
+    name: document.getElementById('f_name').value.trim(),
+    age: Number(document.getElementById('f_age').value),
+    occupation_type: profile.occupation_type,
+    class_grade: isStudent ? occDetail : undefined,
+    profession: !isStudent ? occDetail : undefined,
+    city: document.getElementById('f_city').value.trim(),
+    goal: profile.goal,
+    self_level: profile.self_level,
+    daily_time: profile.daily_time,
+    english_sample: document.getElementById('f_sample').value.trim()
+  };
+
+  saveStatus.className = 'status-msg';
+  saveStatus.textContent = 'Saving...';
+  try {
+    await apiFetch('/users/profile', { method: 'PATCH', body: JSON.stringify(payload) });
+    saveStatus.className = 'status-msg ok';
+    saveStatus.textContent = 'Saved ✓';
+    setTimeout(() => { saveStatus.textContent = ''; }, 1500);
+  } catch (err) {
+    saveStatus.className = 'status-msg err';
+    saveStatus.textContent = err.message || 'Save nahi ho paya.';
+  }
+});
 
 document.getElementById('logoutBtn').addEventListener('click', logout);
 </script>

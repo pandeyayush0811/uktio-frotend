@@ -103,6 +103,7 @@
 
 <script type="module">
 import { GoogleGenAI, Modality } from "https://esm.sh/@google/genai@1.30.0";
+import { API_KEY_STORAGE_KEY } from './shared/auth.js';
 
 function buildBaseInstruction(userName){
 return `You are "Bolo" — a close friend and caring partner-like presence for the user (${userName}), who is helping him practice spoken English through natural conversation. Follow these rules exactly.
@@ -272,7 +273,6 @@ const waveEl = document.getElementById('wave');
 
 /* API key ab is page ke saath store nahi hoti — Settings page (settings.html)
    isi localStorage key mein save karta hai, hum yahan sirf padhte hain. */
-const API_KEY_STORAGE_KEY = 'utkio_gemini_api_key';
 function getApiKey(){
   try{ return (localStorage.getItem(API_KEY_STORAGE_KEY) || '').trim(); }
   catch(e){ return ''; }

@@ -103,8 +103,14 @@ export function showConnectionError() {
     </div>`;
 }
 
+// Must match the key used in settings.html — kept here too so logout()
+// can wipe it without importing settings.html's script.
+export const API_KEY_STORAGE_KEY = 'utkio_gemini_api_key';
+
 export function logout() {
   clearSession();
+  try { localStorage.removeItem(API_KEY_STORAGE_KEY); }
+  catch (e) { console.warn('failed to clear API key on logout', e); }
   window.location.href = 'login.html';
 }
 
