@@ -284,9 +284,12 @@ let currentTurnIndex = -1;
 // Resume support: if ?resume=<session_id> is in the URL, we're
 // continuing a past conversation rather than starting a fresh one.
 // activeSessionId travels with every save so the backend appends to
-// the same session instead of creating a new one. priorTranscriptText
-// gets folded into the system prompt so Bolo remembers the context.
-const activeSessionId = new URLSearchParams(window.location.search).get('resume') || null;
+// the same session instead of creating a new one. It's `let`, not
+// `const`, because it also gets set the FIRST time a fresh (non-resumed)
+// session gets synced — so if the user stops the mic and starts again
+// without leaving this page, the 2nd+ leg appends to the same session
+// too, instead of creating a new session row each time.
+let activeSessionId = new URLSearchParams(window.location.search).get('resume') || null;
 let priorTranscriptText = '';
 
 const micBtn = document.getElementById('micBtn');
@@ -554,12 +557,12 @@ async function stopNativeMic(){
 async function startSession(){
   if (session || isBusy) return;
 
-  // Fresh session = fresh turn history. Any previous session's data is
-  // already either synced or safely sitting in PENDING_CHAT_SESSION_KEY
-  // (finalizeAndSyncSession handles that in stopSession).
-  sessionTurns = [];
-  currentTurnIndex = -1;
-  sessionStartedAt = new Date().toISOString();
+  // Do NOT reset sessionTurns/currentTurnIndex here — if the user stops
+  // the mic and taps it again without leaving this page, we want THIS
+  // restart to continue the same conversation (same backend session,
+  // same memory of what was said), not start a blank one. Only the
+  // very first tap in this page view sets sessionStartedAt.
+  if (!sessionStartedAt) sessionStartedAt = new Date().toISOString();
 
   const apiKey = getApiKey();
   if (!apiKey){
@@ -696,13 +699,31 @@ function stopSession(silent){
 // so there's exactly one place that talks to POST /chat/sessions.
 // Fire-and-forget: local data already exists, so even if this fails
 // (network down right at session-end), next app-open recovery retries it.
+//
+// Also folds the just-finished turns into priorTranscriptText and locks
+// in activeSessionId — so if the user taps the mic again without leaving
+// this page, buildSystemInstruction() still has full memory of what was
+// said, AND the new turns append to the same session instead of a new one.
 async function finalizeAndSyncSession(){
   if (!sessionTurns.length) return;
   persistLocalSession();
-  await syncPendingChatSession();
+
+  const justSpoken = sessionTurns
+    .filter(t => t.content && t.content.trim())
+    .map(t => (t.role === 'user' ? 'User' : 'Bolo') + ': ' + t.content)
+    .join('\n');
+  if (justSpoken){
+    priorTranscriptText = priorTranscriptText ? (priorTranscriptText + '\n' + justSpoken) : justSpoken;
+    if (priorTranscriptText.length > 6000) priorTranscriptText = priorTranscriptText.slice(priorTranscriptText.length - 6000);
+  }
+
+  const syncedSessionId = await syncPendingChatSession();
+  if (syncedSessionId) activeSessionId = syncedSessionId;
+
   sessionTurns = [];
   currentTurnIndex = -1;
-  sessionStartedAt = null;
+  // sessionStartedAt is deliberately NOT reset — if the mic gets tapped
+  // again in this same page view, it's still the same overall session.
 }
 
 window.addEventListener('beforeunload', () => {

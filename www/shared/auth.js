@@ -114,31 +114,35 @@ export const API_KEY_STORAGE_KEY = 'utkio_gemini_api_key';
 // syncPendingChatSession() picks it up next time the app opens.
 export const PENDING_CHAT_SESSION_KEY = 'utkio_pending_chat_session';
 
-// Called silently on every app open (from index.html's splash check).
-// No UI, no blocking navigation — pure best-effort background sync of
-// whatever chat session got stranded on-device last time.
+// Called silently on every app open (from index.html's splash check), and
+// also by chat.html right after a session ends. No UI, no blocking
+// navigation — pure best-effort background sync of whatever chat session
+// got stranded on-device. Returns the backend session_id on success (so
+// chat.html can keep appending to the same session), or null otherwise.
 export async function syncPendingChatSession() {
   let raw;
-  try { raw = localStorage.getItem(PENDING_CHAT_SESSION_KEY); } catch (e) { return; }
-  if (!raw) return;
+  try { raw = localStorage.getItem(PENDING_CHAT_SESSION_KEY); } catch (e) { return null; }
+  if (!raw) return null;
 
   let payload;
   try { payload = JSON.parse(raw); } catch (e) {
     try { localStorage.removeItem(PENDING_CHAT_SESSION_KEY); } catch (_) { /* ignore */ }
-    return;
+    return null;
   }
   if (!payload || !Array.isArray(payload.messages) || !payload.messages.length) {
     try { localStorage.removeItem(PENDING_CHAT_SESSION_KEY); } catch (_) { /* ignore */ }
-    return;
+    return null;
   }
 
   try {
-    await apiFetch('/chat/sessions', { method: 'POST', body: JSON.stringify(payload) });
+    const result = await apiFetch('/chat/sessions', { method: 'POST', body: JSON.stringify(payload) });
     try { localStorage.removeItem(PENDING_CHAT_SESSION_KEY); } catch (_) { /* ignore */ }
+    return result.session_id || null;
   } catch (err) {
     // Still unreachable/still failing — leave it in place, we'll retry
     // on the next app open. Never throw from here; this must stay silent.
     console.warn('pending chat session sync failed, will retry later', err);
+    return null;
   }
 }
 
