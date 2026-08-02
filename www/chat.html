@@ -32,6 +32,8 @@
   .line.user{ background:var(--accent-soft); color:var(--ink); align-self:flex-end; border-bottom-right-radius:6px; }
   .line.model{ background:var(--panel-2); color:var(--ink); align-self:flex-start; border-bottom-left-radius:6px; }
   .line .tag{display:none;}
+  .line.historical{ opacity:0.55; }
+  .history-divider{ text-align:center; color:var(--ink-dim); font-size:0.72rem; margin:16px 0; align-self:center; }
 
   .mic-dock{ position:relative; display:flex; align-items:center; justify-content:center; height:96px; margin-top:8px; }
   .wave{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:4px; opacity:0.35; pointer-events:none; }
@@ -64,9 +66,14 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
     </a>
     <h1 class="app-title">Utkio</h1>
-    <a class="icon-btn" href="settings.html" aria-label="Settings">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    </a>
+    <div style="display:flex;gap:4px;">
+      <a class="icon-btn" href="history.html" aria-label="History">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>
+      </a>
+      <a class="icon-btn" href="settings.html" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </a>
+    </div>
   </header>
 
   <div class="status-row">
@@ -103,7 +110,7 @@
 
 <script type="module">
 import { GoogleGenAI, Modality } from "https://esm.sh/@google/genai@1.30.0";
-import { API_KEY_STORAGE_KEY, PENDING_CHAT_SESSION_KEY, syncPendingChatSession } from './shared/auth.js';
+import { API_KEY_STORAGE_KEY, PENDING_CHAT_SESSION_KEY, syncPendingChatSession, apiFetch } from './shared/auth.js';
 
 function buildBaseInstruction(userName){
 return `You are "Bolo" — a close friend and caring partner-like presence for the user (${userName}), who is helping him practice spoken English through natural conversation. Follow these rules exactly.
@@ -251,6 +258,10 @@ function buildSystemInstruction(){
   if (lines.length){
     instruction += '\n\n═══════════════════════════════\nPERSONALIZATION — is specific user ke baare mein\n═══════════════════════════════\n\n' + lines.join('\n\n');
   }
+
+  if (priorTranscriptText){
+    instruction += `\n\n═══════════════════════════════\nRESUMING A PAST CONVERSATION\n═══════════════════════════════\n\nYe ek naya session nahi hai — ${userName} pichli baatcheet ko resume kar raha hai. Neeche pichli conversation hai (jo ho chuki thi):\n"""\n${priorTranscriptText}\n"""\nIsko yaad rakho aur naturally continue karo — jaise beech mein rukein ho. Shuruaat mein "Hello" ya fresh greeting se shuru mat karo; iski jagah pichli baat ka koi natural reference do (jaise "Haan to hum ye baat kar rahe the na...") phir aage badho.`;
+  }
   return instruction;
 }
 
@@ -272,6 +283,14 @@ let errorAlreadyShown = false;
 let sessionTurns = [];
 let sessionStartedAt = null;
 let currentTurnIndex = -1;
+
+// Resume support: if ?resume=<session_id> is in the URL, we're
+// continuing a past conversation rather than starting a fresh one.
+// activeSessionId travels with every save so the backend appends to
+// the same session instead of creating a new one. priorTranscriptText
+// gets folded into the system prompt so Bolo remembers the context.
+const activeSessionId = new URLSearchParams(window.location.search).get('resume') || null;
+let priorTranscriptText = '';
 
 const micBtn = document.getElementById('micBtn');
 const statusDot = document.getElementById('statusDot');
@@ -329,6 +348,56 @@ function addLine(role){
   return text;
 }
 
+// Renders a line from a PAST (already-saved) session — used only when
+// resuming. Deliberately does NOT touch sessionTurns/currentTurnIndex,
+// since these turns are already in the database; re-saving them would
+// duplicate them.
+function addHistoricalLine(role, content){
+  const div = document.createElement('div');
+  div.className = 'line historical ' + (role === 'user' ? 'user' : 'model');
+  const tag = document.createElement('span');
+  tag.className = 'tag';
+  tag.textContent = role === 'user' ? 'Tum' : 'Bolo';
+  const text = document.createElement('span');
+  text.className = 'text';
+  text.textContent = content;
+  div.appendChild(tag);
+  div.appendChild(text);
+  transcriptEl.appendChild(div);
+}
+
+// If ?resume=<id> is in the URL, fetch that session's past turns, show
+// them (greyed out) at the top of the transcript, and build the text
+// block that gets folded into the system prompt so Bolo remembers the
+// conversation instead of starting cold.
+async function loadResumeContextIfAny(){
+  if (!activeSessionId) return;
+  try{
+    setStatus('Pichli baatcheet load ho rahi hai...', null);
+    const data = await apiFetch('/chat/sessions/' + activeSessionId);
+    const msgs = data.messages || [];
+
+    if (msgs.length){
+      const divider = document.createElement('div');
+      divider.className = 'history-divider';
+      divider.textContent = '── Pichli baatcheet ──';
+      transcriptEl.appendChild(divider);
+      msgs.forEach(m => addHistoricalLine(m.role, m.content));
+      scrollTranscriptToBottom();
+
+      // Cap the injected text so a very long past session doesn't blow
+      // up the system prompt — keep the most recent ~6000 chars.
+      const full = msgs.map(m => (m.role === 'user' ? 'User' : 'Bolo') + ': ' + m.content).join('\n');
+      priorTranscriptText = full.length > 6000 ? full.slice(full.length - 6000) : full;
+    }
+    setStatus('Shuru karne ke liye niche mic button dabao.', null);
+  } catch(err){
+    console.warn('resume context load failed, starting fresh instead', err);
+    setStatus('Purani chat load nahi ho payi — naya session shuru kar sakte ho.', 'err');
+  }
+}
+loadResumeContextIfAny();
+
 // Writes the in-progress session to localStorage. Called at every turn
 // boundary (see addLine above) and once more when the session stops, so
 // a crash mid-session loses at most the last few words being spoken,
@@ -338,6 +407,7 @@ function persistLocalSession(){
     const meaningful = sessionTurns.filter(t => t.content && t.content.trim());
     if (!meaningful.length) { localStorage.removeItem(PENDING_CHAT_SESSION_KEY); return; }
     localStorage.setItem(PENDING_CHAT_SESSION_KEY, JSON.stringify({
+      session_id: activeSessionId, // null for a fresh session, set when resuming
       started_at: sessionStartedAt,
       ended_at: new Date().toISOString(),
       messages: meaningful
