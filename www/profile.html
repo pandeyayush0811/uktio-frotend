@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utkio — Profile</title>
+<link rel="stylesheet" href="shared/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <a class="icon-btn" href="chat.html" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </a>
+    <h1 class="app-title" style="font-size:1.2rem;">Profile</h1>
+    <span style="width:38px;"></span>
+  </header>
+
+  <div class="card" style="margin-top:16px;">
+    <div class="status-msg" id="statusMsg">Loading...</div>
+
+    <div id="profileBody" style="display:none;">
+      <label>Email</label>
+      <div id="emailField" style="margin-bottom:14px;font-weight:600;"></div>
+
+      <label>Member since</label>
+      <div id="createdField" style="margin-bottom:20px;color:var(--ink-dim);font-size:0.85rem;"></div>
+
+      <button class="secondary" id="logoutBtn" style="color:var(--bad);">Logout</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import './shared/config.js';
+import { requireAuthOrRedirect, apiFetch, logout } from './shared/auth.js';
+
+requireAuthOrRedirect();
+
+const statusMsg = document.getElementById('statusMsg');
+const profileBody = document.getElementById('profileBody');
+
+(async () => {
+  try {
+    const data = await apiFetch('/users/me');
+    document.getElementById('emailField').textContent = data.email || '—';
+    document.getElementById('createdField').textContent = data.created_at
+      ? new Date(data.created_at).toLocaleDateString()
+      : '—';
+    statusMsg.style.display = 'none';
+    profileBody.style.display = 'block';
+  } catch (err) {
+    statusMsg.textContent = 'Profile load nahi ho paya: ' + err.message;
+    statusMsg.className = 'status-msg err';
+  }
+})();
+
+document.getElementById('logoutBtn').addEventListener('click', logout);
+</script>
+</body>
+</html>

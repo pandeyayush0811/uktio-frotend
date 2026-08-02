@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utkio</title>
+<link rel="stylesheet" href="shared/style.css">
+<style>
+  .status-row{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    margin:18px 0 20px; visibility:hidden;
+  }
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--ink-dim);flex-shrink:0;}
+  #statusText{font-size:0.95rem;font-weight:500;}
+
+  .chat-card{
+    flex:1; min-height:0; background:var(--card); border-radius:26px; padding:20px 16px;
+    box-shadow:0 20px 40px -20px rgba(60,60,120,0.18);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .transcript{
+    flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column;
+    gap:14px; padding-right:2px; padding-bottom:4px; scroll-behavior:smooth;
+    scrollbar-width:none; -ms-overflow-style:none;
+  }
+  .transcript::-webkit-scrollbar{ display:none; }
+  .transcript:empty::before{
+    content:"The chat will appear here once the conversation starts";
+    color:var(--ink-dim); font-size:0.85rem; font-style:italic; margin:auto;
+  }
+  .line{ padding:12px 16px; border-radius:16px; font-size:0.95rem; line-height:1.5; max-width:82%; }
+  .line.user{ background:var(--accent-soft); color:var(--ink); align-self:flex-end; border-bottom-right-radius:6px; }
+  .line.model{ background:var(--panel-2); color:var(--ink); align-self:flex-start; border-bottom-left-radius:6px; }
+  .line .tag{display:none;}
+
+  .mic-dock{ position:relative; display:flex; align-items:center; justify-content:center; height:96px; margin-top:8px; }
+  .wave{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:4px; opacity:0.35; pointer-events:none; }
+  .wave span{ width:3px; border-radius:2px; background:var(--accent); opacity:0.55; }
+  .mic-btn{
+    position:relative; z-index:1; width:74px; height:74px; border-radius:50%;
+    background:var(--card); border:none; box-shadow:0 6px 16px -6px rgba(30,30,60,0.18);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    transition:transform 0.15s, box-shadow 0.2s, background 0.2s;
+    -webkit-tap-highlight-color: transparent; -webkit-user-select:none; user-select:none;
+    touch-action:manipulation; outline:none;
+  }
+  .mic-btn:focus, .mic-btn:focus-visible{ outline:none; }
+  .mic-btn:hover:not(:disabled){transform:scale(1.04);}
+  .mic-btn:disabled{opacity:0.5;cursor:not-allowed;}
+  .mic-btn svg{width:28px;height:28px;color:var(--accent);}
+  .mic-btn.active{
+    background:var(--accent);
+    box-shadow: 0 0 0 14px rgba(106,99,241,0.16), 0 0 26px 6px rgba(106,99,241,0.55);
+  }
+  .mic-btn.active svg{color:#fff;}
+
+  footer{margin-top:16px;color:var(--ink-dim);font-size:0.72rem;line-height:1.6;text-align:center;visibility:hidden;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <a class="icon-btn" href="profile.html" aria-label="Profile">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </a>
+    <h1 class="app-title">Utkio</h1>
+    <a class="icon-btn" href="settings.html" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </a>
+  </header>
+
+  <div class="status-row">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">Shuru karne ke liye niche mic button dabao</span>
+  </div>
+
+  <div class="chat-card">
+    <div class="transcript" id="transcript"></div>
+  </div>
+
+  <div class="mic-dock">
+    <div class="wave" id="wave" aria-hidden="true"></div>
+    <button id="micBtn" class="mic-btn" aria-label="Baat shuru/band karo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+    </button>
+  </div>
+
+  <footer>
+    Mic access chahiye hoga (browser permission maangega). Best Chrome/Edge mein chalega.
+  </footer>
+</div>
+
+<script type="module">
+  import './shared/config.js';
+  import { requireAuthOrRedirect } from './shared/auth.js';
+  // Guard: bounce to login if there's no session. Everything below this
+  // is your original voice engine, completely untouched.
+  requireAuthOrRedirect();
+</script>
+
+<script type="module">
+import { GoogleGenAI, Modality } from "https://esm.sh/@google/genai@1.30.0";
+
+const SYSTEM_INSTRUCTION = `You are "Bolo" — a close friend and caring partner-like presence for the user (Ayush), who is helping him practice spoken English through natural conversation. Follow these rules exactly.
+
+═══════════════════════════════
+PHASE 1 — CASUAL CHAT (Hindi/Hinglish)
+═══════════════════════════════
+
+1. Start the session in casual Hindi/Hinglish (Roman script), like a close friend checking in — e.g. "Kya Ayush, kaise ho aaj? Sab badhiya?"
+
+2. Have a genuine, warm, emotionally invested conversation in Hindi/Hinglish — like a friend + caring partner combined, not a teacher. If Ayush mentions something like being tired, stressed, or something happened at work, DIG IN with real care and curiosity — ask what happened, why, how he's feeling, show concern ("arey itna stress mat lo", "tum theek to ho na"). Don't rush this phase.
+
+3. When it feels natural (after a genuine back-and-forth, not too soon, not too late), transition with a casual line like "Chalo, thoda mood halka karte hain — chalo phir apna English training shuru karte hain?" and wait for Ayush to confirm (e.g. "haan chalo").
+
+═══════════════════════════════
+PHASE 2 — ENGLISH TRAINING
+═══════════════════════════════
+
+4. TOPIC CONTINUITY — Do NOT start Phase 2 with an unrelated fresh question. Continue the SAME topic/emotion that was being discussed in Phase 1, just now in English, with the same emotionally-invested, caring tone (friend + partner, not teacher). Example: if Phase 1 was about office stress, Phase 2 opener should be like "So you were saying you were tired from office today — did something happen, or was work just too much today?"
+
+5. Once in Phase 2, conduct the conversation in English — natural, warm, invested tone, like continuing the same caring conversation, not switching into "class mode."
+
+6. Keep asking deep, personal, emotionally-engaged follow-up questions — like a real friend/partner genuinely wants to know more (e.g. "okay to manager ne sabko itna kaam kyun de diya aaj?", "which project was it?", "are you still stressed about it now?"). One question per turn.
+
+═══════════════════════════════
+HANDLING HINDI DURING PHASE 2 — TWO DIFFERENT CASES
+═══════════════════════════════
+
+7. CASE A — Ayush switches to Hindi mid-training because he doesn't know a word, got confused, or slipped by mistake (NOT a grammar error, just language-switching). This is NOT a mistake to correct — it's a vocabulary gap to help with:
+   - Immediately and warmly give him the English word/phrase he needed, in Hinglish, then have him repeat it in English.
+   - Do NOT use the "ruko ruko, kya bola tumne abhi" correction flow for this — that's reserved only for grammar mistakes.
+   - Then continue the conversation naturally in English.
+
+8. CASE B — Ayush makes a genuine grammar mistake WHILE speaking in English (wrong tense, wrong article, subject-verb agreement, wrong preposition, sentence structure, etc). This is your most important job:
+   a. In Hinglish, ask him to repeat/confirm what he just said — vary the phrasing naturally (e.g. "Ruko ruko, ek baar phir se bolo, kya bola tumne abhi?").
+   b. In Hinglish, explain simply and kindly what was wrong, no jargon-heavy grammar terms.
+   c. Give 2 to 4 corrected example sentences (examples in English, explanation around them in Hinglish).
+   d. Smoothly return to English and continue — either repeat your last question or pick up naturally from where you left off.
+
+9. Do NOT correct minor disfluencies (small pauses, "um", self-correction) — only genuine grammar mistakes.
+
+═══════════════════════════════
+GENERAL STYLE
+═══════════════════════════════
+
+10. Keep your own sentences short, spoken, natural — this is a voice conversation, not an essay.
+
+11. Be encouraging always — you are a friend + caring partner + English teacher combined, never a strict teacher grading a student. Warmth and emotional investment come first; language correction happens gently within that.
+
+═══════════════════════════════
+EXAMPLE CONVERSATIONS (follow these patterns closely)
+═══════════════════════════════
+
+--- Example 1: Phase 1 → Phase 2 transition ---
+Bolo: Kya Ayush, kaise ho aaj? Sab badhiya?
+Ayush: Haan yaar theek hoon, thoda thaka hua hoon office se aake.
+Bolo: Achha, kaam zyada tha kya aaj? Kya kar rahe ho aajkal office mein?
+Ayush: Bas ek project chal raha hai, thoda deadline pressure hai.
+Bolo: Samajh sakta hoon yaar. Chalo, thoda mood halka karte hain — chalo phir apna English training shuru karte hain?
+Ayush: Haan chalo.
+Bolo: So you were saying you were tired from office today — did something happen, or was work just too much today?
+
+--- Example 2: Normal correct English flow (no correction needed) ---
+Ayush: I have a project going on with a tight deadline.
+Bolo: That sounds stressful. What exactly is the project about?
+
+--- Example 3: CASE A — Hindi fallback due to vocabulary gap (NOT corrected as a mistake) ---
+Bolo: What does your manager expect from this project?
+Ayush: He wants... uh... jaldi delivery, but hume resources kam mile hain.
+Bolo: Koi baat nahi! "Resources kam milna" ke liye tum bol sakte ho — "we didn't get enough resources." Ab bolo: "We didn't get enough resources for this project."
+Ayush: We didn't get enough resources for this project.
+Bolo: Exactly! So how are you managing with limited resources then?
+
+--- Example 4: CASE B — genuine grammar mistake in English ---
+Bolo: What did you do yesterday at office?
+Ayush: Yesterday I go to a meeting with my manager.
+Bolo: Ruko ruko, ek baar phir se bolo — kya bola tumne abhi?
+Ayush: Yesterday I go to a meeting with my manager.
+Bolo: Dekho, "yesterday" past mein hai, to "go" nahi, "went" use hoga. Jaise:
+- "Yesterday I went to a meeting with my manager."
+- "I went to a meeting with my manager yesterday."
+- "I had a meeting with my manager yesterday."
+Ab tum try karo phir se.
+Ayush: Yesterday I went to a meeting with my manager.
+Bolo: Perfect! So what did he say in the meeting?`;
+
+let session = null;
+let playCtx = null;
+let micListenerHandle = null;
+let nextPlayTime = 0;
+let isModelSpeaking = false;
+let scheduledSources = [];
+let currentUserLine = null;
+let currentModelLine = null;
+let isBusy = false;
+let errorAlreadyShown = false;
+
+const micBtn = document.getElementById('micBtn');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const transcriptEl = document.getElementById('transcript');
+const waveEl = document.getElementById('wave');
+
+/* API key ab is page ke saath store nahi hoti — Settings page (settings.html)
+   isi localStorage key mein save karta hai, hum yahan sirf padhte hain. */
+const API_KEY_STORAGE_KEY = 'utkio_gemini_api_key';
+function getApiKey(){
+  try{ return (localStorage.getItem(API_KEY_STORAGE_KEY) || '').trim(); }
+  catch(e){ return ''; }
+}
+
+(function buildWave(){
+  const BARS = 28;
+  for (let i = 0; i < BARS; i++){
+    const bar = document.createElement('span');
+    const h = 6 + Math.round(Math.abs(Math.sin(i * 0.7)) * 26);
+    bar.style.height = h + 'px';
+    waveEl.appendChild(bar);
+  }
+})();
+
+function setStatus(text, mode){
+  statusText.textContent = text;
+  statusDot.className = 'dot' + (mode ? ' ' + mode : '');
+  micBtn.classList.toggle('active', mode === 'live');
+  waveEl.classList.toggle('live', mode === 'live');
+}
+
+function scrollTranscriptToBottom(){
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+}
+
+function addLine(role){
+  const div = document.createElement('div');
+  div.className = 'line ' + role;
+  const tag = document.createElement('span');
+  tag.className = 'tag';
+  tag.textContent = role === 'user' ? 'Tum' : 'Bolo';
+  const text = document.createElement('span');
+  text.className = 'text';
+  div.appendChild(tag);
+  div.appendChild(text);
+  transcriptEl.appendChild(div);
+  scrollTranscriptToBottom();
+  return text;
+}
+
+function describeMicError(err){
+  const name = err && err.name;
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError')
+    return 'Mic band: tumne ya browser ne permission deny kar di. Address bar mein mic icon dabakar "Allow" karo.';
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError')
+    return 'Mic nahi mila: is device/browser mein koi microphone connected nahi hai.';
+  if (name === 'NotReadableError' || name === 'TrackStartError')
+    return 'Mic hardware abhi open nahi ho paya (dobara try ho chuki hai). Koi doosra app mic use kar raha ho to usse band karo, ya app ko ek baar dobara kholke try karo.';
+  if (name === 'SecurityError')
+    return 'Mic access block: yeh page HTTPS (ya localhost) par nahi chal raha, isliye browser mic nahi de raha.';
+  if (name === 'OverconstrainedError')
+    return 'Mic settings match nahi hui is device mein.';
+  return 'Mic access mein error: ' + (err && err.message ? err.message : 'wajah pata nahi chali (' + err + ')');
+}
+
+function describeConnectError(err){
+  const msg = (err && err.message) ? err.message : String(err);
+  if (/api key not valid|api_key_invalid|invalid api key/i.test(msg))
+    return 'API key galat hai — Settings mein Google AI Studio se copy karke phir se paste karo.';
+  if (/quota|resource_exhausted|rate limit/i.test(msg))
+    return 'API quota/rate-limit khatam ho gaya — thodi der ruk kar try karo ya naya key banao.';
+  if (/permission_denied|not authorized/i.test(msg))
+    return 'Yeh API key Live API (gemini-3.1-flash-live-preview) use nahi kar sakti — key ki permissions check karo.';
+  if (/failed to fetch|network|timeout|ENOTFOUND/i.test(msg))
+    return 'Google se connect nahi ho paya — internet connection check karo.';
+  if (/model not found|not_found/i.test(msg))
+    return 'Model available nahi hai is region/account ke liye.';
+  return 'Connect nahi ho paya, wajah: ' + msg;
+}
+
+function describeCloseEvent(e){
+  if (!e) return 'Session band ho gaya (koi close-details nahi mile).';
+  if (e.code === 1000) return null;
+  const reason = e.reason ? (' — ' + e.reason) : ' (server ne koi reason text nahi bheja)';
+  return 'Session band ho gaya, code ' + e.code + reason + '. Ye us API key/model access ki taraf se koi dikkat ho sakti hai.';
+}
+
+function floatTo16BitPCM(float32Array){
+  const out = new Int16Array(float32Array.length);
+  for (let i = 0; i < float32Array.length; i++){
+    const s = Math.max(-1, Math.min(1, float32Array[i]));
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return out;
+}
+
+function int16ToBase64(int16Array){
+  const bytes = new Uint8Array(int16Array.buffer);
+  const CHUNK = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+function base64ToInt16(base64){
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Int16Array(bytes.buffer);
+}
+
+function playAudioChunk(base64Data){
+  if (!playCtx) return;
+  try{
+    isModelSpeaking = true;
+    const int16 = base64ToInt16(base64Data);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+
+    const buffer = playCtx.createBuffer(1, float32.length, 24000);
+    buffer.copyToChannel(float32, 0);
+
+    const src = playCtx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(playCtx.destination);
+
+    const now = playCtx.currentTime;
+    if (nextPlayTime < now) nextPlayTime = now + 0.05;
+    src.start(nextPlayTime);
+    nextPlayTime += buffer.duration;
+    scheduledSources.push(src);
+    src.onended = () => {
+      scheduledSources = scheduledSources.filter(s => s !== src);
+      if (scheduledSources.length === 0){
+        setTimeout(() => {
+          if (scheduledSources.length === 0) isModelSpeaking = false;
+        }, 200);
+      }
+    };
+  }catch(err){
+    console.error('playback error', err);
+    setStatus('Audio playback mein dikkat: ' + err.message, 'err');
+  }
+}
+
+function stopPlayback(){
+  scheduledSources.forEach(s => { try{ s.stop(); }catch(e){ /* already stopped, ignore */ } });
+  scheduledSources = [];
+  isModelSpeaking = false;
+  if (playCtx) nextPlayTime = playCtx.currentTime;
+}
+
+function getMicCapturePlugin(){
+  if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.MicCapture){
+    throw new Error('MicCapture native plugin nahi mila — MainActivity.java mein registerPlugin(MicCapturePlugin.class) check karo, aur app rebuild karo.');
+  }
+  return window.Capacitor.Plugins.MicCapture;
+}
+
+async function startNativeMic(){
+  const MicCapture = getMicCapturePlugin();
+
+  micListenerHandle = await MicCapture.addListener('audioChunk', (data) => {
+    if (!session || !data || !data.audio) return;
+    if (isModelSpeaking) return;
+    try{
+      session.sendRealtimeInput({ audio: { data: data.audio, mimeType: 'audio/pcm;rate=16000' } });
+    }catch(err){
+      console.error('mic send error', err);
+      setStatus('Audio bhejte waqt error: ' + err.message, 'err');
+    }
+  });
+
+  await MicCapture.start();
+}
+
+async function stopNativeMic(){
+  try{
+    const MicCapture = getMicCapturePlugin();
+    await MicCapture.stop();
+  }catch(e){ /* plugin already gone ya nahi mila, ignore */ }
+  if (micListenerHandle){
+    try{ await micListenerHandle.remove(); }catch(e){}
+    micListenerHandle = null;
+  }
+}
+
+async function startSession(){
+  if (session || isBusy) return;
+
+  const apiKey = getApiKey();
+  if (!apiKey){
+    setStatus('Pehle Settings mein apni Gemini API key daalo.', 'err');
+    window.location.href = 'settings.html';
+    return;
+  }
+
+  isBusy = true;
+  micBtn.disabled = true;
+
+  setStatus('Gemini se connect ho raha hai...', null);
+  try{
+    const ai = new GoogleGenAI({ apiKey, apiVersion: 'v1alpha' });
+
+    session = await ai.live.connect({
+      model: 'gemini-3.1-flash-live-preview',
+      config: {
+        responseModalities: [Modality.AUDIO],
+        systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } }
+        }
+      },
+      callbacks: {
+        onopen: () => {
+          setStatus('Connected — mic on, bolna shuru karo', 'live');
+          micBtn.disabled = false;
+          isBusy = false;
+        },
+        onmessage: (msg) => handleMessage(msg),
+        onerror: (e) => {
+          console.error('live session error', e);
+          const detail = (e && e.message) ? e.message : 'connection ne error event bheja, exact wajah server ne nahi batayi';
+          setStatus('Connection error — ' + detail, 'err');
+          errorAlreadyShown = true;
+          stopSession(true);
+        },
+        onclose: (e) => {
+          if (!errorAlreadyShown){
+            const msg = describeCloseEvent(e);
+            if (msg) setStatus(msg, 'err'); else setStatus('Session band ho gaya.', null);
+          }
+          errorAlreadyShown = false;
+          micBtn.disabled = false;
+          isBusy = false;
+        }
+      }
+    });
+
+    playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+    nextPlayTime = 0;
+
+    setStatus('Mic (native) shuru ho raha hai...', null);
+    try{
+      await startNativeMic();
+      setStatus('Connected — mic on, bolna shuru karo', 'live');
+    }catch(err){
+      console.error('native mic error', err);
+      setStatus('Native mic start nahi ho paya: ' + (err && err.message ? err.message : err), 'err');
+      errorAlreadyShown = true;
+      stopSession(true);
+      return;
+    }
+
+  }catch(err){
+    console.error('connect error', err);
+    setStatus(describeConnectError(err), 'err');
+    micBtn.disabled = false;
+    isBusy = false;
+  }
+}
+
+function handleMessage(msg){
+  try{
+    const content = msg.serverContent;
+    if (!content) return;
+
+    if (content.interrupted){
+      stopPlayback();
+    }
+
+    if (content.inputTranscription && content.inputTranscription.text){
+      currentModelLine = null;
+      if (!currentUserLine) currentUserLine = addLine('user');
+      currentUserLine.textContent += content.inputTranscription.text;
+      scrollTranscriptToBottom();
+    }
+
+    if (content.outputTranscription && content.outputTranscription.text){
+      currentUserLine = null;
+      if (!currentModelLine) currentModelLine = addLine('model');
+      currentModelLine.textContent += content.outputTranscription.text;
+      scrollTranscriptToBottom();
+    }
+
+    if (content.modelTurn && content.modelTurn.parts){
+      for (const part of content.modelTurn.parts){
+        if (part.inlineData && part.inlineData.data){
+          playAudioChunk(part.inlineData.data);
+        }
+      }
+    }
+
+    if (content.turnComplete){
+      isModelSpeaking = false;
+    }
+  }catch(err){
+    console.error('message handling error', err, msg);
+    setStatus('Ek message process karte waqt error aaya: ' + err.message, 'err');
+  }
+}
+
+function stopSession(silent){
+  stopNativeMic().catch((e) => console.error('stopNativeMic error', e));
+
+  stopPlayback();
+  if (playCtx){ try{ playCtx.close(); }catch(e){} playCtx = null; }
+  if (session){ try{ session.close(); }catch(e){ console.error('session close error', e); } session = null; }
+
+  isBusy = false;
+  micBtn.disabled = false;
+  if (!silent) setStatus('Ruk gaya. Dobara shuru karne ke liye mic dabao.', null);
+}
+
+window.addEventListener('beforeunload', () => {
+  if (session) stopSession(true);
+});
+
+window.addEventListener('error', (e) => {
+  console.error('uncaught error', e.error || e.message);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('unhandled promise rejection', e.reason);
+});
+
+micBtn.addEventListener('click', () => {
+  if (session) stopSession();
+  else startSession();
+});
+</script>
+</body>
+</html>
