@@ -21,13 +21,14 @@
 -->
 <script type="module">
 import './shared/config.js';
-import { getSession, goToPostAuthDestination } from './shared/auth.js';
+import { getSession, goToPostAuthDestination, syncPendingChatSession } from './shared/auth.js';
 
 const splashStatus = document.getElementById('splashStatus');
 
 setTimeout(() => {
   const session = getSession();
   if (session && session.access_token) {
+    syncPendingChatSession(); // fire-and-forget — never blocks navigation
     goToPostAuthDestination(text => { splashStatus.textContent = text; });
   } else {
     window.location.href = 'login.html';

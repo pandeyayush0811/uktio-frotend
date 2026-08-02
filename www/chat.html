@@ -103,7 +103,7 @@
 
 <script type="module">
 import { GoogleGenAI, Modality } from "https://esm.sh/@google/genai@1.30.0";
-import { API_KEY_STORAGE_KEY } from './shared/auth.js';
+import { API_KEY_STORAGE_KEY, PENDING_CHAT_SESSION_KEY, syncPendingChatSession } from './shared/auth.js';
 
 function buildBaseInstruction(userName){
 return `You are "Bolo" — a close friend and caring partner-like presence for the user (${userName}), who is helping him practice spoken English through natural conversation. Follow these rules exactly.
@@ -265,6 +265,14 @@ let currentModelLine = null;
 let isBusy = false;
 let errorAlreadyShown = false;
 
+// Local-write, batch-sync chat history: turns get pushed here live as the
+// conversation happens, persisted to localStorage at each turn boundary
+// (crash-safe), then synced to the backend in ONE call when the session
+// ends. currentTurnIndex tracks which sessionTurns[] entry is "in progress".
+let sessionTurns = [];
+let sessionStartedAt = null;
+let currentTurnIndex = -1;
+
 const micBtn = document.getElementById('micBtn');
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
@@ -311,7 +319,30 @@ function addLine(role){
   div.appendChild(text);
   transcriptEl.appendChild(div);
   scrollTranscriptToBottom();
+
+  // A new line always means the previous turn (if any) just finished —
+  // persist it now, then start tracking the new one.
+  persistLocalSession();
+  sessionTurns.push({ role: role === 'user' ? 'user' : 'assistant', content: '' });
+  currentTurnIndex = sessionTurns.length - 1;
+
   return text;
+}
+
+// Writes the in-progress session to localStorage. Called at every turn
+// boundary (see addLine above) and once more when the session stops, so
+// a crash mid-session loses at most the last few words being spoken,
+// never the whole conversation.
+function persistLocalSession(){
+  try {
+    const meaningful = sessionTurns.filter(t => t.content && t.content.trim());
+    if (!meaningful.length) { localStorage.removeItem(PENDING_CHAT_SESSION_KEY); return; }
+    localStorage.setItem(PENDING_CHAT_SESSION_KEY, JSON.stringify({
+      started_at: sessionStartedAt,
+      ended_at: new Date().toISOString(),
+      messages: meaningful
+    }));
+  } catch(e){ console.warn('persistLocalSession failed', e); }
 }
 
 function describeMicError(err){
@@ -456,6 +487,13 @@ async function stopNativeMic(){
 async function startSession(){
   if (session || isBusy) return;
 
+  // Fresh session = fresh turn history. Any previous session's data is
+  // already either synced or safely sitting in PENDING_CHAT_SESSION_KEY
+  // (finalizeAndSyncSession handles that in stopSession).
+  sessionTurns = [];
+  currentTurnIndex = -1;
+  sessionStartedAt = new Date().toISOString();
+
   const apiKey = getApiKey();
   if (!apiKey){
     setStatus('Pehle Settings mein apni Gemini API key daalo.', 'err');
@@ -543,6 +581,7 @@ function handleMessage(msg){
       currentModelLine = null;
       if (!currentUserLine) currentUserLine = addLine('user');
       currentUserLine.textContent += content.inputTranscription.text;
+      if (currentTurnIndex >= 0) sessionTurns[currentTurnIndex].content += content.inputTranscription.text;
       scrollTranscriptToBottom();
     }
 
@@ -550,6 +589,7 @@ function handleMessage(msg){
       currentUserLine = null;
       if (!currentModelLine) currentModelLine = addLine('model');
       currentModelLine.textContent += content.outputTranscription.text;
+      if (currentTurnIndex >= 0) sessionTurns[currentTurnIndex].content += content.outputTranscription.text;
       scrollTranscriptToBottom();
     }
 
@@ -580,6 +620,22 @@ function stopSession(silent){
   isBusy = false;
   micBtn.disabled = false;
   if (!silent) setStatus('Ruk gaya. Dobara shuru karne ke liye mic dabao.', null);
+
+  finalizeAndSyncSession();
+}
+
+// Captures the final state of whatever's currently in progress, then
+// hands off to the SAME sync helper index.html uses for crash recovery —
+// so there's exactly one place that talks to POST /chat/sessions.
+// Fire-and-forget: local data already exists, so even if this fails
+// (network down right at session-end), next app-open recovery retries it.
+async function finalizeAndSyncSession(){
+  if (!sessionTurns.length) return;
+  persistLocalSession();
+  await syncPendingChatSession();
+  sessionTurns = [];
+  currentTurnIndex = -1;
+  sessionStartedAt = null;
 }
 
 window.addEventListener('beforeunload', () => {

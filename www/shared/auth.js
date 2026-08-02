@@ -107,6 +107,41 @@ export function showConnectionError() {
 // can wipe it without importing settings.html's script.
 export const API_KEY_STORAGE_KEY = 'utkio_gemini_api_key';
 
+// Local-write, batch-sync pattern for chat history: chat.html writes
+// turns here as the conversation happens (crash-safe), then pushes the
+// whole thing to the backend in one call when the session ends. If that
+// push fails (app killed, network drop), the data stays here and
+// syncPendingChatSession() picks it up next time the app opens.
+export const PENDING_CHAT_SESSION_KEY = 'utkio_pending_chat_session';
+
+// Called silently on every app open (from index.html's splash check).
+// No UI, no blocking navigation — pure best-effort background sync of
+// whatever chat session got stranded on-device last time.
+export async function syncPendingChatSession() {
+  let raw;
+  try { raw = localStorage.getItem(PENDING_CHAT_SESSION_KEY); } catch (e) { return; }
+  if (!raw) return;
+
+  let payload;
+  try { payload = JSON.parse(raw); } catch (e) {
+    try { localStorage.removeItem(PENDING_CHAT_SESSION_KEY); } catch (_) { /* ignore */ }
+    return;
+  }
+  if (!payload || !Array.isArray(payload.messages) || !payload.messages.length) {
+    try { localStorage.removeItem(PENDING_CHAT_SESSION_KEY); } catch (_) { /* ignore */ }
+    return;
+  }
+
+  try {
+    await apiFetch('/chat/sessions', { method: 'POST', body: JSON.stringify(payload) });
+    try { localStorage.removeItem(PENDING_CHAT_SESSION_KEY); } catch (_) { /* ignore */ }
+  } catch (err) {
+    // Still unreachable/still failing — leave it in place, we'll retry
+    // on the next app open. Never throw from here; this must stay silent.
+    console.warn('pending chat session sync failed, will retry later', err);
+  }
+}
+
 export function logout() {
   clearSession();
   try { localStorage.removeItem(API_KEY_STORAGE_KEY); }
