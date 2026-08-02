@@ -39,7 +39,9 @@ import './shared/config.js';
 import { apiFetch, saveSession, getSession, goToPostAuthDestination } from './shared/auth.js';
 
 // Already logged in? skip straight to chat/onboarding (whichever applies).
-if (getSession()?.access_token) goToPostAuthDestination();
+if (getSession()?.access_token) {
+  goToPostAuthDestination(text => setStatus(text));
+}
 
 let mode = 'login'; // 'login' | 'signup'
 let isAuthBusy = false; // single source of truth — locks BOTH auth flows together
@@ -98,7 +100,7 @@ form.addEventListener('submit', async (e) => {
 
     if (data.session) {
       saveSession(data.session);
-      await goToPostAuthDestination();
+      await goToPostAuthDestination(text => setStatus(text));
       return; // navigating away — no need to unlock, avoids flicker
     } else {
       // signup without immediate session = email confirmation required
@@ -143,7 +145,7 @@ googleBtn.addEventListener('click', async () => {
       body: JSON.stringify({ idToken: result.idToken })
     });
     saveSession(data.session);
-    await goToPostAuthDestination();
+    await goToPostAuthDestination(text => setStatus(text));
     // navigating away — no need to unlock/reset label here
   } catch (err) {
     setStatus(err.message, 'err');

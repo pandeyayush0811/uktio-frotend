@@ -93,11 +93,12 @@
 <script type="module">
   import './shared/config.js';
   import { requireCompleteProfile } from './shared/auth.js';
-  // Guard: bounce to login if no session, or to onboarding.html if the
-  // user hasn't finished it yet. Stashes the profile on window so the
-  // voice-engine script below can build a personalized system prompt.
-  const data = await requireCompleteProfile();
-  if (data && data.profile) window.__UKTIO_PROFILE = data.profile;
+  // Guard: bounce to login if no/invalid session, or to onboarding.html if
+  // the user hasn't finished it yet, or show a retry screen if the backend
+  // is unreachable. Stashes the profile on window so the voice-engine
+  // script below can build a personalized system prompt.
+  const profile = await requireCompleteProfile();
+  if (profile) window.__UKTIO_PROFILE = profile;
 </script>
 
 <script type="module">
@@ -189,21 +190,28 @@ ${userName}: Yesterday I went to a meeting with my manager.
 Bolo: Perfect! So what did he say in the meeting?`;
 }
 
-// Goal/level/time -> short guidance appended after the base instruction.
-// Keep this tight — a few lines, not a rewrite of the base personality.
+// Goal -> what kind of topics/direction to lean the conversation towards.
 const GOAL_GUIDANCE = {
-  interview: 'His goal is interview/professional English — lean conversation topics towards work, projects, and describing his experience clearly and confidently.',
-  daily_confidence: 'His goal is everyday confidence speaking English with friends/family — keep topics casual, everyday-life focused.',
-  exam_prep: 'His goal is exam prep (IELTS/TOEFL-type) — favor clear, well-structured sentences and gently push him to speak in fuller sentences rather than short fragments.',
-  travel: 'His goal is travel/talking to foreigners — favor practical, everyday-situation topics (directions, ordering food, small talk with strangers).',
-  content_creation: 'His goal is content creation/social media — favor topics about expressing opinions clearly and speaking energetically.',
-  general: 'His goal is general overall improvement — keep topics varied and natural.'
+  interview: 'Uska goal hai interview/professional English — conversation topics kaam, projects, aur apna kaam clearly confidently describe karne ki taraf lean karo.',
+  daily_confidence: 'Uska goal hai roz ki confidence — dosto/family se English mein comfortably baat kar sake. Topics casual aur everyday-life wale rakho.',
+  exam_prep: 'Uska goal hai exam prep (IELTS/TOEFL type) — clear, well-structured sentences ki taraf gently push karo, chhote fragments ki jagah pura sentence bulwao.',
+  travel: 'Uska goal hai travel/foreigners se baat karna — practical everyday-situation topics rakho (directions, order karna, ajnabi se small talk).',
+  content_creation: 'Uska goal hai content creation/social media — apni baat clearly aur energetically express karne wale topics pe focus karo.',
+  general: 'Uska goal hai general overall improvement — topics varied aur natural rakho.'
 };
 
+// Self-rated level -> how to calibrate your own vocabulary + correction style.
 const LEVEL_GUIDANCE = {
-  beginner: 'His self-rated level is beginner — use simpler vocabulary in your own English sentences, be extra patient and encouraging, and correct gently without overwhelming him with multiple corrections at once.',
-  intermediate: 'His self-rated level is intermediate — use natural everyday vocabulary, correct real grammar mistakes as usual.',
-  advanced: 'His self-rated level is advanced — feel free to use richer vocabulary yourself, and also gently point out subtler issues (word choice, natural phrasing) in addition to grammar.'
+  beginner: 'Self-rated level: beginner — apni English mein simple vocabulary use karo, extra patient/encouraging raho, aur ek baar mein ek hi correction do — bahut saari mistakes ek saath mat batao.',
+  intermediate: 'Self-rated level: intermediate — natural everyday vocabulary use karo, real grammar mistakes normally correct karo.',
+  advanced: 'Self-rated level: advanced — khud thodi richer vocabulary use karo, aur grammar ke alawa subtler cheezein bhi point out karo (word choice, natural phrasing).'
+};
+
+// Daily practice time -> how to pace a single session.
+const TIME_GUIDANCE = {
+  '5_10': 'Uske paas roz sirf 5-10 minute hote hain practice ke liye — session tight aur focused rakho, ek session mein 1-2 hi core topics/corrections pe concentrate karo, lambi filler baaton mein time waste mat karo.',
+  '15_20': 'Uske paas roz 15-20 minute hote hain — normal-paced conversation chalao, thoda depth mein jaa sakte ho.',
+  '30_plus': 'Uske paas roz 30+ minute hote hain — lambi, deeper conversations chala sakte ho, multiple topics explore kar sakte ho ek hi session mein.'
 };
 
 function buildSystemInstruction(){
@@ -211,12 +219,36 @@ function buildSystemInstruction(){
   const userName = (profile.name && profile.name.trim()) || 'dost';
   let instruction = buildBaseInstruction(userName);
 
-  const extras = [];
-  if (profile.goal && GOAL_GUIDANCE[profile.goal]) extras.push(GOAL_GUIDANCE[profile.goal]);
-  if (profile.self_level && LEVEL_GUIDANCE[profile.self_level]) extras.push(LEVEL_GUIDANCE[profile.self_level]);
+  const lines = [];
 
-  if (extras.length){
-    instruction += '\n\n═══════════════════════════════\nPERSONALIZATION (this user specifically)\n═══════════════════════════════\n\n' + extras.join('\n');
+  if (profile.age) {
+    lines.push(`${userName} ki age ${profile.age} saal hai.`);
+  }
+
+  if (profile.occupation_type === 'student' && profile.class_grade) {
+    lines.push(`${userName} student hai — "${profile.class_grade}" mein padhta hai. Tone thoda friendly-mentor jaisa rakho.`);
+  } else if (profile.occupation_type === 'professional' && profile.profession) {
+    lines.push(`${userName} working professional hai — role: "${profile.profession}". Tone thoda more mature/peer-like rakho, kabhi kabhi work-related situations bhi topics mein use kar sakte ho.`);
+  }
+
+  if (profile.goal && GOAL_GUIDANCE[profile.goal]) lines.push(GOAL_GUIDANCE[profile.goal]);
+  if (profile.self_level && LEVEL_GUIDANCE[profile.self_level]) lines.push(LEVEL_GUIDANCE[profile.self_level]);
+  if (profile.daily_time && TIME_GUIDANCE[profile.daily_time]) lines.push(TIME_GUIDANCE[profile.daily_time]);
+
+  if (profile.city) {
+    lines.push(`${userName} "${profile.city}" se hai — kabhi kabhi casually is city ka reference use kar sakte ho (local jagah/food/context), lekin force mat karna, sirf natural lage tabhi.`);
+  }
+
+  // The single biggest lever: the user's own raw English writing sample.
+  // Instead of running a separate analysis pipeline, we hand the actual
+  // text straight to the model — it can read real grammar/vocabulary
+  // directly, which is more reliable than the self-rated level above.
+  if (profile.english_sample && profile.english_sample.trim()) {
+    lines.push(`${userName} ne onboarding ke time apne baare mein ye likha tha (uska actual English writing sample hai) — is asli sample se uska real vocabulary/grammar level khud andaza lagao, aur agar ye upar wale self-rated level se alag lage to is asli sample ko zyada trust karo:\n"""\n${profile.english_sample.trim()}\n"""`);
+  }
+
+  if (lines.length){
+    instruction += '\n\n═══════════════════════════════\nPERSONALIZATION — is specific user ke baare mein\n═══════════════════════════════\n\n' + lines.join('\n\n');
   }
   return instruction;
 }

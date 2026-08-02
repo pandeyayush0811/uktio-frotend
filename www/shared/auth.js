@@ -50,8 +50,57 @@ export async function apiFetch(path, options = {}) {
     }
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+  if (!res.ok) {
+    const err = new Error(data.error || ('Request failed (' + res.status + ')'));
+    err.status = res.status; // callers use this to tell "bad token" apart from "server unreachable"
+    throw err;
+  }
   return data;
+}
+
+// Fetches /users/me with automatic retries — built specifically to survive
+// Render's free-tier cold start (first request after idle can take 15-30s).
+// Returns exactly one of:
+//   { ok: true, profile }                 — success
+//   { ok: false, reason: 'unauthenticated' } — token is genuinely invalid/expired (401/403). Session is cleared.
+//   { ok: false, reason: 'unreachable' }     — server never responded after retries. Session is left untouched.
+// onStatus(text) is called before each retry so the UI can show progress.
+export async function fetchProfileWithRetry(onStatus) {
+  const delaysMs = [0, 2000, 4000, 8000]; // ~14s of retrying total, covers a cold start
+  for (let attempt = 0; attempt < delaysMs.length; attempt++) {
+    if (delaysMs[attempt] > 0) {
+      onStatus && onStatus(`Server se connect ho raha hai... (${attempt}/${delaysMs.length - 1})`);
+      await new Promise(r => setTimeout(r, delaysMs[attempt]));
+    }
+    try {
+      const data = await apiFetch('/users/me');
+      return { ok: true, profile: data.profile || null };
+    } catch (err) {
+      if (err.status === 401 || err.status === 403) {
+        clearSession(); // token is bad — never keep retrying or looping on it
+        return { ok: false, reason: 'unauthenticated' };
+      }
+      // Network error / server down / cold start — worth retrying.
+      if (attempt === delaysMs.length - 1) {
+        return { ok: false, reason: 'unreachable' };
+      }
+    }
+  }
+}
+
+// Takes over the page with a friendly "can't connect" message + retry button.
+// Used only when the backend never responded after all retries — deliberately
+// does NOT redirect anywhere, since bouncing between pages with a dead
+// backend is exactly what caused the login<->home loop before.
+export function showConnectionError() {
+  document.body.innerHTML = `
+    <div class="wrap" style="justify-content:center;">
+      <div class="card">
+        <div class="step-title">Connect nahi ho pa raha 😕</div>
+        <div class="step-sub">Server abhi respond nahi kar raha (pehli baar thoda time lag sakta hai). Internet check karo ya thodi der baad try karo.</div>
+        <button class="primary" onclick="location.reload()">Dobara try karo</button>
+      </div>
+    </div>`;
 }
 
 export function logout() {
@@ -61,37 +110,42 @@ export function logout() {
 
 // Call right after a successful login/signup/google-auth to send the user
 // to the right place: onboarding.html if they haven't finished it yet,
-// chat.html otherwise. Falls back to chat.html if the profile fetch fails
-// (better to let them in than to trap them on a spinner).
-export async function goToPostAuthDestination() {
-  try {
-    const data = await apiFetch('/users/me');
-    window.location.href = (data.profile && data.profile.onboarding_completed)
+// chat.html otherwise. Loop-safe: an invalid token clears itself instead
+// of bouncing forever, and an unreachable server shows a retry screen
+// instead of guessing where to send the user.
+export async function goToPostAuthDestination(onStatus) {
+  const result = await fetchProfileWithRetry(onStatus);
+  if (result.ok) {
+    window.location.href = (result.profile && result.profile.onboarding_completed)
       ? 'chat.html'
       : 'onboarding.html';
-  } catch (e) {
-    window.location.href = 'chat.html';
+  } else if (result.reason === 'unauthenticated') {
+    window.location.href = 'login.html';
+  } else {
+    showConnectionError();
   }
 }
 
 // Guard for pages that require a *finished* profile (chat.html, profile.html
-// etc). Redirects to login.html if not logged in, or onboarding.html if
-// logged in but onboarding isn't done yet. Returns the profile data on
-// success, or null (and it has already redirected).
-export async function requireCompleteProfile() {
+// etc). Redirects to login.html if not logged in (or if the token turns out
+// to be invalid), or onboarding.html if logged in but onboarding isn't done
+// yet. Returns the profile on success, or null (already handled the page).
+export async function requireCompleteProfile(onStatus) {
   const s = requireAuthOrRedirect();
   if (!s) return null;
 
-  try {
-    const data = await apiFetch('/users/me');
-    if (!data.profile || !data.profile.onboarding_completed) {
+  const result = await fetchProfileWithRetry(onStatus);
+  if (result.ok) {
+    if (!result.profile || !result.profile.onboarding_completed) {
       window.location.href = 'onboarding.html';
       return null;
     }
-    return data;
-  } catch (e) {
-    // Token invalid/expired etc — bounce to login rather than trap the user.
+    return result.profile;
+  } else if (result.reason === 'unauthenticated') {
     window.location.href = 'login.html';
+    return null;
+  } else {
+    showConnectionError();
     return null;
   }
 }

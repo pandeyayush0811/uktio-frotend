@@ -31,9 +31,14 @@ import { requireAuthOrRedirect, apiFetch } from './shared/auth.js';
 requireAuthOrRedirect();
 
 const answers = {
-  name: '', age_or_class: '', city: '',
+  name: '', age: '', occupation_type: '', class_grade: '', profession: '', city: '',
   goal: '', self_level: '', english_sample: '', daily_time: ''
 };
+
+const OCCUPATION_OPTIONS = [
+  { value: 'student', label: 'Student hoon' },
+  { value: 'professional', label: 'Working professional hoon' }
+];
 
 const GOAL_OPTIONS = [
   { value: 'interview', label: 'Job interview / professional English' },
@@ -70,14 +75,47 @@ const steps = [
     validate(){ return answers.name.trim() ? true : 'Naam to batao yaar 🙂'; }
   },
   {
-    title: 'Class ya age?',
-    sub: 'School/college mein ho to class batao, warna apni age.',
+    title: 'Tumhari age kya hai?',
+    sub: 'Sirf number daalo.',
     render(el){
-      el.innerHTML = `<input type="text" id="f_age" placeholder="e.g. Class 10 / 24 years">`;
-      el.querySelector('#f_age').value = answers.age_or_class;
-      el.querySelector('#f_age').addEventListener('input', e => answers.age_or_class = e.target.value);
+      el.innerHTML = `<input type="text" inputmode="numeric" id="f_age" placeholder="e.g. 22">`;
+      el.querySelector('#f_age').value = answers.age;
+      el.querySelector('#f_age').addEventListener('input', e => {
+        answers.age = e.target.value.replace(/[^0-9]/g, '');
+        e.target.value = answers.age;
+      });
     },
-    validate(){ return answers.age_or_class.trim() ? true : 'Ye field bhi bhar do.'; }
+    validate(){
+      const n = Number(answers.age);
+      if (!answers.age || !Number.isInteger(n) || n < 5 || n > 100) return 'Sahi age daalo (5-100 ke beech).';
+      return true;
+    }
+  },
+  {
+    title: 'Tum student ho ya working professional?',
+    sub: '',
+    render(el){
+      el.innerHTML = `<div class="chip-group" id="f_occ"></div>`;
+      renderChips(el.querySelector('#f_occ'), OCCUPATION_OPTIONS, 'occupation_type');
+    },
+    validate(){ return answers.occupation_type ? true : 'Ek option choose karo.'; }
+  },
+  {
+    // Content of this step depends on the previous answer — computed at render time.
+    title(){ return answers.occupation_type === 'student' ? 'Kaunsi class/course mein ho?' : 'Tumhara profession/role kya hai?'; },
+    sub(){ return answers.occupation_type === 'student' ? 'e.g. "Class 10", "B.Tech 2nd year"' : 'e.g. "Software Engineer", "Teacher"'; },
+    render(el){
+      const isStudent = answers.occupation_type === 'student';
+      const key = isStudent ? 'class_grade' : 'profession';
+      const placeholder = isStudent ? 'e.g. Class 10' : 'e.g. Software Engineer';
+      el.innerHTML = `<input type="text" id="f_occdetail" placeholder="${placeholder}">`;
+      el.querySelector('#f_occdetail').value = answers[key];
+      el.querySelector('#f_occdetail').addEventListener('input', e => answers[key] = e.target.value);
+    },
+    validate(){
+      const key = answers.occupation_type === 'student' ? 'class_grade' : 'profession';
+      return answers[key] && answers[key].trim() ? true : 'Ye field bhar do.';
+    }
   },
   {
     title: 'Kis city se ho?',
@@ -170,7 +208,9 @@ function renderDots(){
 function renderStep(){
   statusMsg.textContent = '';
   const step = steps[current];
-  stepBody.innerHTML = `<div class="step-title">${step.title}</div><div class="step-sub">${step.sub}</div>`;
+  const title = typeof step.title === 'function' ? step.title() : step.title;
+  const sub = typeof step.sub === 'function' ? step.sub() : step.sub;
+  stepBody.innerHTML = `<div class="step-title">${title}</div><div class="step-sub">${sub}</div>`;
   step.render(stepBody);
   backBtn.style.display = current === 0 ? 'none' : '';
   nextBtn.textContent = current === steps.length - 1 ? 'Shuru karo' : 'Aage badho';

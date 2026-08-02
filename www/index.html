@@ -10,6 +10,7 @@
 <div class="wrap splash-wrap">
   <h1 class="app-title">Utkio</h1>
   <div class="spinner" aria-hidden="true"></div>
+  <p class="hint" id="splashStatus" style="min-height:1.2em;"></p>
 </div>
 
 <!--
@@ -22,10 +23,15 @@
 import './shared/config.js';
 import { getSession, goToPostAuthDestination } from './shared/auth.js';
 
+const splashStatus = document.getElementById('splashStatus');
+
 setTimeout(() => {
   const session = getSession();
-  if (session && session.access_token) goToPostAuthDestination();
-  else window.location.href = 'login.html';
+  if (session && session.access_token) {
+    goToPostAuthDestination(text => { splashStatus.textContent = text; });
+  } else {
+    window.location.href = 'login.html';
+  }
 }, 500);
 </script>
 </body>
