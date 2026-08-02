@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utkio — Chalo shuru karein</title>
+<link rel="stylesheet" href="shared/style.css">
+</head>
+<body>
+<div class="wrap" style="justify-content:center;">
+  <div class="progress-dots" id="progressDots"></div>
+
+  <div class="card">
+    <div id="stepBody"></div>
+
+    <div class="status-msg err" id="statusMsg"></div>
+
+    <div class="step-nav">
+      <button class="secondary" id="backBtn" style="display:none;">Back</button>
+      <button class="primary" id="nextBtn">Aage badho</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import './shared/config.js';
+import { requireAuthOrRedirect, apiFetch } from './shared/auth.js';
+
+// Just needs a logged-in session — this page itself doesn't require
+// onboarding to already be complete (that would be circular).
+requireAuthOrRedirect();
+
+const answers = {
+  name: '', age_or_class: '', city: '',
+  goal: '', self_level: '', english_sample: '', daily_time: ''
+};
+
+const GOAL_OPTIONS = [
+  { value: 'interview', label: 'Job interview / professional English' },
+  { value: 'daily_confidence', label: 'Roz ki confidence — dosto/family se English mein baat karna' },
+  { value: 'exam_prep', label: 'Exam prep (IELTS / TOEFL / etc.)' },
+  { value: 'travel', label: 'Travel — foreigners se baat karna' },
+  { value: 'content_creation', label: 'Content creation / social media' },
+  { value: 'general', label: 'Bas general improvement' }
+];
+
+const LEVEL_OPTIONS = [
+  { value: 'beginner', label: 'Beginner — basics se shuru kar raha hoon' },
+  { value: 'intermediate', label: 'Intermediate — thoda bol leta hoon, fluent nahi' },
+  { value: 'advanced', label: 'Advanced — kaafi comfortable hoon, polish karna hai' }
+];
+
+const TIME_OPTIONS = [
+  { value: '5_10', label: '5–10 minute daily' },
+  { value: '15_20', label: '15–20 minute daily' },
+  { value: '30_plus', label: '30+ minute daily' }
+];
+
+// Each step: render(container) fills the step UI; validate() returns
+// true/error-string; optional flag skips the "required" check.
+const steps = [
+  {
+    title: 'Tumhara naam kya hai?',
+    sub: 'Bolo tumhe isi naam se bulayega.',
+    render(el){
+      el.innerHTML = `<input type="text" id="f_name" placeholder="e.g. Ayush" autocomplete="name">`;
+      el.querySelector('#f_name').value = answers.name;
+      el.querySelector('#f_name').addEventListener('input', e => answers.name = e.target.value);
+    },
+    validate(){ return answers.name.trim() ? true : 'Naam to batao yaar 🙂'; }
+  },
+  {
+    title: 'Class ya age?',
+    sub: 'School/college mein ho to class batao, warna apni age.',
+    render(el){
+      el.innerHTML = `<input type="text" id="f_age" placeholder="e.g. Class 10 / 24 years">`;
+      el.querySelector('#f_age').value = answers.age_or_class;
+      el.querySelector('#f_age').addEventListener('input', e => answers.age_or_class = e.target.value);
+    },
+    validate(){ return answers.age_or_class.trim() ? true : 'Ye field bhi bhar do.'; }
+  },
+  {
+    title: 'Kis city se ho?',
+    sub: '(Optional — chaho to skip kar sakte ho)',
+    render(el){
+      el.innerHTML = `<input type="text" id="f_city" placeholder="e.g. Patna">`;
+      el.querySelector('#f_city').value = answers.city;
+      el.querySelector('#f_city').addEventListener('input', e => answers.city = e.target.value);
+    },
+    validate(){ return true; } // optional
+  },
+  {
+    title: 'English kyun improve karna chahte ho?',
+    sub: 'Isse Bolo ko pata chalega tumhare liye kaunse topics zyada useful hain.',
+    render(el){
+      el.innerHTML = `<div class="chip-group" id="f_goal"></div>`;
+      renderChips(el.querySelector('#f_goal'), GOAL_OPTIONS, 'goal');
+    },
+    validate(){ return answers.goal ? true : 'Ek option choose karo.'; }
+  },
+  {
+    title: 'Abhi tumhara English level kaisa hai?',
+    sub: 'Jo sabse sahi lage wahi choose karo — koi galat jawaab nahi hota.',
+    render(el){
+      el.innerHTML = `<div class="chip-group" id="f_level"></div>`;
+      renderChips(el.querySelector('#f_level'), LEVEL_OPTIONS, 'self_level');
+    },
+    validate(){ return answers.self_level ? true : 'Ek option choose karo.'; }
+  },
+  {
+    title: 'Apne baare mein 2-3 line likho',
+    sub: '(Optional) English mein try karo — jo bhi aata hai. Ye sirf record hoga, koi grading nahi hai.',
+    render(el){
+      el.innerHTML = `
+        <textarea id="f_sample" placeholder="e.g. My name is... I like... I work as..." maxlength="500"></textarea>
+        <div class="char-hint" id="charHint">0 / 500</div>`;
+      const ta = el.querySelector('#f_sample');
+      ta.value = answers.english_sample;
+      el.querySelector('#charHint').textContent = ta.value.length + ' / 500';
+      ta.addEventListener('input', e => {
+        answers.english_sample = e.target.value;
+        el.querySelector('#charHint').textContent = e.target.value.length + ' / 500';
+      });
+    },
+    validate(){ return true; } // optional
+  },
+  {
+    title: 'Roz kitna time nikal sakte ho practice ke liye?',
+    sub: 'Isse hume andaza milega session kitna lamba rakhna chahiye.',
+    render(el){
+      el.innerHTML = `<div class="chip-group" id="f_time"></div>`;
+      renderChips(el.querySelector('#f_time'), TIME_OPTIONS, 'daily_time');
+    },
+    validate(){ return answers.daily_time ? true : 'Ek option choose karo.'; }
+  }
+];
+
+function renderChips(container, options, key){
+  options.forEach(opt => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip' + (answers[key] === opt.value ? ' selected' : '');
+    btn.textContent = opt.label;
+    btn.addEventListener('click', () => {
+      answers[key] = opt.value;
+      container.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+    container.appendChild(btn);
+  });
+}
+
+let current = 0;
+const stepBody = document.getElementById('stepBody');
+const statusMsg = document.getElementById('statusMsg');
+const backBtn = document.getElementById('backBtn');
+const nextBtn = document.getElementById('nextBtn');
+const progressDots = document.getElementById('progressDots');
+
+function renderDots(){
+  progressDots.innerHTML = '';
+  steps.forEach((_, i) => {
+    const dot = document.createElement('span');
+    if (i < current) dot.className = 'done';
+    else if (i === current) dot.className = 'active';
+    progressDots.appendChild(dot);
+  });
+}
+
+function renderStep(){
+  statusMsg.textContent = '';
+  const step = steps[current];
+  stepBody.innerHTML = `<div class="step-title">${step.title}</div><div class="step-sub">${step.sub}</div>`;
+  step.render(stepBody);
+  backBtn.style.display = current === 0 ? 'none' : '';
+  nextBtn.textContent = current === steps.length - 1 ? 'Shuru karo' : 'Aage badho';
+  renderDots();
+}
+
+backBtn.addEventListener('click', () => {
+  if (current > 0){ current--; renderStep(); }
+});
+
+nextBtn.addEventListener('click', async () => {
+  const result = steps[current].validate();
+  if (result !== true){
+    statusMsg.textContent = result;
+    return;
+  }
+
+  if (current < steps.length - 1){
+    current++;
+    renderStep();
+    return;
+  }
+
+  // Last step — submit everything.
+  nextBtn.disabled = true;
+  backBtn.disabled = true;
+  statusMsg.className = 'status-msg';
+  statusMsg.textContent = 'Save ho raha hai...';
+
+  try {
+    await apiFetch('/users/onboarding', {
+      method: 'POST',
+      body: JSON.stringify(answers)
+    });
+    window.location.href = 'chat.html';
+  } catch (err) {
+    statusMsg.className = 'status-msg err';
+    statusMsg.textContent = err.message || 'Kuch galat ho gaya, dobara try karo.';
+    nextBtn.disabled = false;
+    backBtn.disabled = false;
+  }
+});
+
+renderStep();
+</script>
+</body>
+</html>

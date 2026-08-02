@@ -58,3 +58,40 @@ export function logout() {
   clearSession();
   window.location.href = 'login.html';
 }
+
+// Call right after a successful login/signup/google-auth to send the user
+// to the right place: onboarding.html if they haven't finished it yet,
+// chat.html otherwise. Falls back to chat.html if the profile fetch fails
+// (better to let them in than to trap them on a spinner).
+export async function goToPostAuthDestination() {
+  try {
+    const data = await apiFetch('/users/me');
+    window.location.href = (data.profile && data.profile.onboarding_completed)
+      ? 'chat.html'
+      : 'onboarding.html';
+  } catch (e) {
+    window.location.href = 'chat.html';
+  }
+}
+
+// Guard for pages that require a *finished* profile (chat.html, profile.html
+// etc). Redirects to login.html if not logged in, or onboarding.html if
+// logged in but onboarding isn't done yet. Returns the profile data on
+// success, or null (and it has already redirected).
+export async function requireCompleteProfile() {
+  const s = requireAuthOrRedirect();
+  if (!s) return null;
+
+  try {
+    const data = await apiFetch('/users/me');
+    if (!data.profile || !data.profile.onboarding_completed) {
+      window.location.href = 'onboarding.html';
+      return null;
+    }
+    return data;
+  } catch (e) {
+    // Token invalid/expired etc — bounce to login rather than trap the user.
+    window.location.href = 'login.html';
+    return null;
+  }
+}

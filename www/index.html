@@ -20,11 +20,12 @@
 -->
 <script type="module">
 import './shared/config.js';
-import { getSession } from './shared/auth.js';
+import { getSession, goToPostAuthDestination } from './shared/auth.js';
 
 setTimeout(() => {
   const session = getSession();
-  window.location.href = (session && session.access_token) ? 'chat.html' : 'login.html';
+  if (session && session.access_token) goToPostAuthDestination();
+  else window.location.href = 'login.html';
 }, 500);
 </script>
 </body>

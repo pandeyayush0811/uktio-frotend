@@ -90,6 +90,37 @@ button.secondary.btn-loading::after{
 }
 @keyframes utkio-spin{ to{ transform:rotate(360deg); } }
 
+/* ---- Onboarding step wizard ---- */
+.progress-dots{ display:flex; gap:6px; justify-content:center; margin-bottom:22px; }
+.progress-dots span{ width:8px; height:8px; border-radius:50%; background:var(--line); transition:background 0.2s, transform 0.2s; }
+.progress-dots span.done{ background:var(--accent); }
+.progress-dots span.active{ background:var(--accent); transform:scale(1.3); }
+
+.step-title{ font-size:1.15rem; font-weight:700; margin:0 0 6px; }
+.step-sub{ font-size:0.85rem; color:var(--ink-dim); margin:0 0 20px; line-height:1.5; }
+
+textarea{
+  width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--ink);
+  padding:11px 13px; border-radius:10px; font-size:0.95rem; outline:none; margin-bottom:8px;
+  font-family:inherit; resize:vertical; min-height:100px;
+}
+textarea:focus{border-color:var(--accent);}
+.char-hint{font-size:0.72rem;color:var(--ink-dim);text-align:right;margin-bottom:14px;}
+
+.chip-group{ display:flex; flex-direction:column; gap:10px; margin-bottom:8px; }
+.chip{
+  text-align:left; width:100%; font-family:inherit; font-size:0.92rem; font-weight:500;
+  padding:13px 16px; border-radius:12px; border:1.5px solid var(--line);
+  background:var(--card); color:var(--ink); cursor:pointer; transition:border-color 0.15s, background 0.15s;
+}
+.chip:hover{border-color:var(--accent);}
+.chip.selected{ border-color:var(--accent); background:var(--accent-soft); font-weight:700; }
+
+.step-nav{ display:flex; gap:10px; margin-top:20px; }
+.step-nav button.secondary{ margin-top:0; }
+.step-nav button.primary{ flex:1; }
+.step-nav button.secondary{ flex:0 0 auto; width:auto; padding:13px 18px; }
+
 /* ---- Splash ---- */
 .splash-wrap{ align-items:center; justify-content:center; gap:18px; }
 .spinner{
