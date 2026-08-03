@@ -97,6 +97,8 @@ async function loadTranscript(sessionId, container){
   }
 }
 
+const MIN_TURNS_FOR_ANALYSIS = 10;
+
 function renderList(sessions){
   sessionList.innerHTML = '';
   if (!sessions.length){
@@ -110,6 +112,24 @@ function renderList(sessions){
       <div class="chat-card-date">${formatDateTime(s.started_at)}</div>
       <div class="chat-card-meta">${formatDuration(s.started_at, s.ended_at)} · ${s.turn_count} turns</div>
       <div class="expanded-transcript"></div>`;
+
+    // Report button: only shown once the chat is long enough to
+    // meaningfully analyze. "Generate" vs "See report" depends on
+    // whether one already exists (has_report, from GET /chat/sessions).
+    if (s.turn_count >= MIN_TURNS_FOR_ANALYSIS){
+      const reportBtn = document.createElement('button');
+      reportBtn.className = 'resume-btn';
+      reportBtn.style.marginTop = '8px';
+      reportBtn.style.borderColor = 'var(--accent-orange)';
+      reportBtn.style.color = 'var(--accent-orange)';
+      reportBtn.textContent = s.has_report ? '📊 See report' : '📊 Generate report';
+      reportBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.location.href = 'report.html?session=' + s.id + (s.has_report ? '' : '&generate=1');
+      });
+      card.appendChild(reportBtn);
+    }
+
     let loaded = false;
     card.addEventListener('click', () => {
       const willOpen = !card.classList.contains('open');

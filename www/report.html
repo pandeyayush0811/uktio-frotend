@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utkio — Report</title>
+<link rel="stylesheet" href="shared/style.css">
+<style>
+  .wrap{ overflow-y:auto; }
+  .report-summary{
+    background:var(--card); border-radius:18px; padding:20px; margin:16px 0;
+    box-shadow:0 6px 18px -12px rgba(60,60,120,0.2); font-size:0.95rem; line-height:1.6;
+  }
+  .strengths-list{ list-style:none; padding:0; margin:0; }
+  .strengths-list li{ padding:8px 0 8px 26px; position:relative; font-size:0.9rem; }
+  .strengths-list li::before{ content:"✓"; position:absolute; left:0; color:#2e9e5b; font-weight:700; }
+  .mistake-card{
+    background:var(--card); border-radius:16px; padding:18px; margin-bottom:14px;
+    box-shadow:0 6px 18px -12px rgba(60,60,120,0.2);
+  }
+  .mistake-title{ font-weight:700; font-size:0.98rem; margin-bottom:8px; }
+  .mistake-explanation{ font-size:0.88rem; line-height:1.6; color:var(--ink); margin-bottom:12px; }
+  .example-row{ display:flex; flex-direction:column; gap:2px; padding:10px 0; border-top:1px solid var(--line); font-size:0.86rem; }
+  .example-row:first-of-type{ border-top:none; }
+  .example-wrong{ color:var(--bad); text-decoration:line-through; opacity:0.8; }
+  .example-right{ color:#2e9e5b; font-weight:600; }
+  .practice-tip-card{
+    background:var(--accent-soft); border-radius:16px; padding:18px; margin:16px 0 24px;
+    font-size:0.9rem; line-height:1.6;
+  }
+  .practice-tip-card strong{ display:block; margin-bottom:6px; color:var(--accent); }
+  .generate-state{ text-align:center; padding:60px 20px; }
+  .generate-state svg{ color:var(--accent-orange); margin-bottom:16px; }
+  .generate-state p{ color:var(--ink-dim); font-size:0.88rem; margin-bottom:20px; }
+  .spinner-ring{
+    width:32px; height:32px; border:3px solid var(--line); border-top-color:var(--accent-orange);
+    border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 16px;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topbar">
+    <a class="icon-btn" href="history.html" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </a>
+    <h1 class="app-title" style="font-size:1.2rem;">Report</h1>
+    <span style="width:38px;"></span>
+  </header>
+
+  <div id="content"></div>
+</div>
+
+<script type="module">
+import './shared/config.js';
+import { requireAuthOrRedirect, apiFetch } from './shared/auth.js';
+import { initBackNav } from './shared/back-nav.js';
+
+requireAuthOrRedirect();
+initBackNav('history.html');
+
+const params = new URLSearchParams(window.location.search);
+const sessionId = params.get('session');
+const shouldAutoGenerate = params.get('generate') === '1';
+const content = document.getElementById('content');
+
+function renderGenerateState(message, showButton){
+  content.innerHTML = `
+    <div class="generate-state">
+      ${showButton ? '' : '<div class="spinner-ring"></div>'}
+      <p>${message}</p>
+      ${showButton ? '<button class="primary" id="genBtn" style="width:auto;padding:12px 28px;">Generate Report</button>' : ''}
+    </div>`;
+  if (showButton) document.getElementById('genBtn').addEventListener('click', generateReport);
+}
+
+function renderReport(report){
+  const strengthsHtml = (report.strengths || []).map(s => `<li>${s}</li>`).join('');
+  const mistakesHtml = (report.mistakes || []).map(m => `
+    <div class="mistake-card">
+      <div class="mistake-title">${m.title}</div>
+      <div class="mistake-explanation">${m.explanation}</div>
+      ${(m.examples || []).map(ex => `
+        <div class="example-row">
+          <span class="example-wrong">✗ ${ex.wrong}</span>
+          <span class="example-right">✓ ${ex.right}</span>
+        </div>`).join('')}
+    </div>`).join('');
+
+  content.innerHTML = `
+    <div class="report-summary">${report.summary}</div>
+    ${strengthsHtml ? `<div class="drawer-section-label" style="margin-top:20px;">What you did well</div><div class="report-summary"><ul class="strengths-list">${strengthsHtml}</ul></div>` : ''}
+    ${mistakesHtml ? `<div class="drawer-section-label" style="margin-top:20px;">Areas to work on</div>${mistakesHtml}` : ''}
+    ${report.practice_tip ? `<div class="practice-tip-card"><strong>💡 Practice tip</strong>${report.practice_tip}</div>` : ''}
+  `;
+}
+
+async function generateReport(){
+  renderGenerateState('Report generate ho raha hai... isme 10-20 seconds lag sakte hain.', false);
+  try {
+    const data = await apiFetch('/chat/sessions/' + sessionId + '/analyze', { method: 'POST' });
+    renderReport(data.report);
+  } catch (err) {
+    renderGenerateState('Report banane mein dikkat hui: ' + (err.message || 'Try again') + '.', true);
+  }
+}
+
+async function init(){
+  if (!sessionId){
+    content.innerHTML = '<div class="status-msg err" style="margin-top:20px;">Session ID missing.</div>';
+    return;
+  }
+  try {
+    const data = await apiFetch('/chat/sessions/' + sessionId + '/report');
+    renderReport(data.report);
+  } catch (err) {
+    if (err.status === 404){
+      if (shouldAutoGenerate) generateReport();
+      else renderGenerateState('Is chat ka abhi tak koi report nahi bana hai.', true);
+    } else {
+      renderGenerateState('Report load nahi ho paya: ' + err.message, true);
+    }
+  }
+}
+
+init();
+</script>
+</body>
+</html>
