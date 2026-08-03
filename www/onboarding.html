@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Utkio — Chalo shuru karein</title>
+<title>Utkio — Let's get started</title>
 <link rel="stylesheet" href="shared/style.css">
 </head>
 <body>
@@ -17,7 +17,7 @@
 
     <div class="step-nav">
       <button class="secondary" id="backBtn" style="display:none;">Back</button>
-      <button class="primary" id="nextBtn">Aage badho</button>
+      <button class="primary" id="nextBtn">Next</button>
     </div>
   </div>
 </div>
@@ -38,47 +38,47 @@ const answers = {
 };
 
 const OCCUPATION_OPTIONS = [
-  { value: 'student', label: 'Student hoon' },
-  { value: 'professional', label: 'Working professional hoon' }
+  { value: 'student', label: "I'm a student" },
+  { value: 'professional', label: "I'm a working professional" }
 ];
 
 const GOAL_OPTIONS = [
   { value: 'interview', label: 'Job interview / professional English' },
-  { value: 'daily_confidence', label: 'Roz ki confidence — dosto/family se English mein baat karna' },
+  { value: 'daily_confidence', label: 'Everyday confidence — talking in English with friends/family' },
   { value: 'exam_prep', label: 'Exam prep (IELTS / TOEFL / etc.)' },
-  { value: 'travel', label: 'Travel — foreigners se baat karna' },
+  { value: 'travel', label: 'Travel — talking with foreigners' },
   { value: 'content_creation', label: 'Content creation / social media' },
-  { value: 'general', label: 'Bas general improvement' }
+  { value: 'general', label: 'Just general improvement' }
 ];
 
 const LEVEL_OPTIONS = [
-  { value: 'beginner', label: 'Beginner — basics se shuru kar raha hoon' },
-  { value: 'intermediate', label: 'Intermediate — thoda bol leta hoon, fluent nahi' },
-  { value: 'advanced', label: 'Advanced — kaafi comfortable hoon, polish karna hai' }
+  { value: 'beginner', label: 'Beginner — starting from the basics' },
+  { value: 'intermediate', label: "Intermediate — I can speak a bit, not fluent" },
+  { value: 'advanced', label: "Advanced — I'm quite comfortable, just want to polish it" }
 ];
 
 const TIME_OPTIONS = [
-  { value: '5_10', label: '5–10 minute daily' },
-  { value: '15_20', label: '15–20 minute daily' },
-  { value: '30_plus', label: '30+ minute daily' }
+  { value: '5_10', label: '5–10 minutes daily' },
+  { value: '15_20', label: '15–20 minutes daily' },
+  { value: '30_plus', label: '30+ minutes daily' }
 ];
 
 // Each step: render(container) fills the step UI; validate() returns
 // true/error-string; optional flag skips the "required" check.
 const steps = [
   {
-    title: 'Tumhara naam kya hai?',
-    sub: 'Bolo tumhe isi naam se bulayega.',
+    title: 'What is your name?',
+    sub: 'Utkio will call you by this name.',
     render(el){
       el.innerHTML = `<input type="text" id="f_name" placeholder="e.g. Ayush" autocomplete="name">`;
       el.querySelector('#f_name').value = answers.name;
       el.querySelector('#f_name').addEventListener('input', e => answers.name = e.target.value);
     },
-    validate(){ return answers.name.trim() ? true : 'Naam to batao yaar 🙂'; }
+    validate(){ return answers.name.trim() ? true : 'Please enter your name 🙂'; }
   },
   {
-    title: 'Tumhari age kya hai?',
-    sub: 'Sirf number daalo.',
+    title: 'What is your age?',
+    sub: 'Enter numbers only.',
     render(el){
       el.innerHTML = `<input type="text" inputmode="numeric" id="f_age" placeholder="e.g. 22">`;
       el.querySelector('#f_age').value = answers.age;
@@ -89,22 +89,24 @@ const steps = [
     },
     validate(){
       const n = Number(answers.age);
-      if (!answers.age || !Number.isInteger(n) || n < 5 || n > 100) return 'Sahi age daalo (5-100 ke beech).';
+      if (!answers.age || !Number.isInteger(n) || n < 5 || n > 100) return 'Please enter a valid age (between 5-100).';
       return true;
     }
   },
+  
+
   {
-    title: 'Tum student ho ya working professional?',
+    title: 'Are you a student or a working professional?',
     sub: '',
     render(el){
       el.innerHTML = `<div class="chip-group" id="f_occ"></div>`;
       renderChips(el.querySelector('#f_occ'), OCCUPATION_OPTIONS, 'occupation_type');
     },
-    validate(){ return answers.occupation_type ? true : 'Ek option choose karo.'; }
+    validate(){ return answers.occupation_type ? true : 'Choose one'; }
   },
   {
     // Content of this step depends on the previous answer — computed at render time.
-    title(){ return answers.occupation_type === 'student' ? 'Kaunsi class/course mein ho?' : 'Tumhara profession/role kya hai?'; },
+    title(){ return answers.occupation_type === 'student' ? 'Which class/course are you in?' : 'What is your profession/role?'; },
     sub(){ return answers.occupation_type === 'student' ? 'e.g. "Class 10", "B.Tech 2nd year"' : 'e.g. "Software Engineer", "Teacher"'; },
     render(el){
       const isStudent = answers.occupation_type === 'student';
@@ -116,12 +118,12 @@ const steps = [
     },
     validate(){
       const key = answers.occupation_type === 'student' ? 'class_grade' : 'profession';
-      return answers[key] && answers[key].trim() ? true : 'Ye field bhar do.';
+      return answers[key] && answers[key].trim() ? true : 'Please fill this field.';
     }
   },
   {
-    title: 'Kis city se ho?',
-    sub: '(Optional — chaho to skip kar sakte ho)',
+    title: 'Which city are you from?',
+    sub: '(Optional — you can skip this)',
     render(el){
       el.innerHTML = `<input type="text" id="f_city" placeholder="e.g. Patna">`;
       el.querySelector('#f_city').value = answers.city;
@@ -130,26 +132,26 @@ const steps = [
     validate(){ return true; } // optional
   },
   {
-    title: 'English kyun improve karna chahte ho?',
-    sub: 'Isse Bolo ko pata chalega tumhare liye kaunse topics zyada useful hain.',
+    title: 'Why do you want to improve your English?',
+    sub: 'This will help Utkio know which topics are most useful for you.',
     render(el){
       el.innerHTML = `<div class="chip-group" id="f_goal"></div>`;
       renderChips(el.querySelector('#f_goal'), GOAL_OPTIONS, 'goal');
     },
-    validate(){ return answers.goal ? true : 'Ek option choose karo.'; }
+    validate(){ return answers.goal ? true : 'Please choose an option.'; }
   },
   {
-    title: 'Abhi tumhara English level kaisa hai?',
-    sub: 'Jo sabse sahi lage wahi choose karo — koi galat jawaab nahi hota.',
+    title: 'What is your current English level?',
+    sub: "Choose whichever feels most accurate — there's no wrong answer.",
     render(el){
       el.innerHTML = `<div class="chip-group" id="f_level"></div>`;
       renderChips(el.querySelector('#f_level'), LEVEL_OPTIONS, 'self_level');
     },
-    validate(){ return answers.self_level ? true : 'Ek option choose karo.'; }
+    validate(){ return answers.self_level ? true : 'Please choose an option.'; }
   },
   {
-    title: 'Apne baare mein 2-3 line likho',
-    sub: '(Optional) English mein try karo — jo bhi aata hai. Ye sirf record hoga, koi grading nahi hai.',
+    title: 'Write 2-3 lines about yourself',
+    sub: '(Optional) Try it in English — whatever you know. This is just for the record, no grading.',
     render(el){
       el.innerHTML = `
         <textarea id="f_sample" placeholder="e.g. My name is... I like... I work as..." maxlength="500"></textarea>
@@ -165,13 +167,13 @@ const steps = [
     validate(){ return true; } // optional
   },
   {
-    title: 'Roz kitna time nikal sakte ho practice ke liye?',
-    sub: 'Isse hume andaza milega session kitna lamba rakhna chahiye.',
+    title: 'How much time can you spare daily for practice?',
+    sub: 'This will give us an idea of how long the sessions should be.',
     render(el){
       el.innerHTML = `<div class="chip-group" id="f_time"></div>`;
       renderChips(el.querySelector('#f_time'), TIME_OPTIONS, 'daily_time');
     },
-    validate(){ return answers.daily_time ? true : 'Ek option choose karo.'; }
+    validate(){ return answers.daily_time ? true : 'Please choose an option.'; }
   }
 ];
 
@@ -215,7 +217,7 @@ function renderStep(){
   stepBody.innerHTML = `<div class="step-title">${title}</div><div class="step-sub">${sub}</div>`;
   step.render(stepBody);
   backBtn.style.display = current === 0 ? 'none' : '';
-  nextBtn.textContent = current === steps.length - 1 ? 'Shuru karo' : 'Aage badho';
+  nextBtn.textContent = current === steps.length - 1 ? 'Get Started' : 'Next';
   renderDots();
 }
 
@@ -240,7 +242,7 @@ nextBtn.addEventListener('click', async () => {
   nextBtn.disabled = true;
   backBtn.disabled = true;
   statusMsg.className = 'status-msg';
-  statusMsg.textContent = 'Save ho raha hai...';
+  statusMsg.textContent = 'Saving...';
 
   try {
     await apiFetch('/users/onboarding', {
@@ -250,7 +252,7 @@ nextBtn.addEventListener('click', async () => {
     window.location.href = 'chat.html';
   } catch (err) {
     statusMsg.className = 'status-msg err';
-    statusMsg.textContent = err.message || 'Kuch galat ho gaya, dobara try karo.';
+    statusMsg.textContent = err.message || 'Something went wrong, please try again.';
     nextBtn.disabled = false;
     backBtn.disabled = false;
   }

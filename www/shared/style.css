@@ -182,7 +182,7 @@ footer{margin-top:16px;color:var(--ink-dim);font-size:0.72rem;line-height:1.6;te
 .chats-title{ font-family:var(--font-serif); font-size:2rem; font-weight:700; margin:6px 0 16px; }
 .search-bar{
   display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line);
-  border-radius:14px; padding:11px 14px; margin-bottom:18px;
+  border-radius:11px; padding:11px 14px; margin-bottom:11px;
 }
 .search-bar svg{ width:18px; height:18px; color:var(--ink-dim); flex-shrink:0; }
 .search-bar input{

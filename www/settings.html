@@ -52,13 +52,14 @@
       <label for="apiKey">Google Gemini API key</label>
       <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off">
       <p class="hint">
-        Key sirf tumhare phone/device mein save hoti hai (kisi server pe nahi) — agli baar app khologe to dobara daalni nahi padegi. Direct Google ko jaati hai connection ke waqt.
-        Free key <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> se milegi (credit card nahi chahiye).
+        The key is stored only on your phone/device (not on any server), so you won't need to enter it again the next time you open the app. It is sent directly to Google only when a connection is made. You can get a free API key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>. No credit card is required.
+
         <br><br>
-        Security ke liye: <strong>logout karte hi ye key automatically device se delete ho jaati hai</strong> — agli baar login karke dobara daalni hogi.
+For your security: <strong>when you log out, the key is automatically deleted from your device</strong>. The next time you log in, you'll need to enter it again.
+
       </p>
       <div class="status-msg ok" id="savedMsg" style="min-height:1.2em;"></div>
-      <button class="secondary" id="deleteKeyBtn" style="color:var(--bad);margin-top:4px;">Key delete karo</button>
+      <button class="secondary" id="deleteKeyBtn" style="color:var(--bad);margin-top:4px;">Delete your key</button>
     </div>
   </div>
 
@@ -69,8 +70,9 @@
         <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M21.9 3.7 2.7 11.3c-1.3.5-1.3 1.2-.2 1.6l4.9 1.5 1.9 5.8c.2.7.5.9 1 .9.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.8l3-14.3c.3-1.3-.4-1.8-1.7-1.1zM8.4 13.7l9.5-6c.5-.3.9-.1.6.3l-8 7.4-.3 3.2-1.5-4.9z"/></svg>
       </div>
       <div>
-        <div class="telegram-text-title">Join our Telegram group</div>
-        <div class="telegram-text-sub">Koi bhi problem ho, seedha yahan batao</div>
+       <div class="telegram-text-title">Contact the Co-Founder</div>
+<div class="telegram-text-sub">If you have any questions or face any issues, contact the co-founder directly for help.</div>
+
       </div>
     </a>
   </div>
@@ -130,7 +132,7 @@ apiKeyInput.addEventListener('input', () => {
 deleteKeyBtn.addEventListener('click', () => {
   apiKeyInput.value = '';
   try { localStorage.removeItem(API_KEY_STORAGE_KEY); } catch (e) {}
-  flashMsg('Key delete ho gayi');
+  flashMsg('Key deleted successfully');
 });
 
 document.getElementById('logoutBtn').addEventListener('click', logout);

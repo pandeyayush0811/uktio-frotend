@@ -83,17 +83,18 @@ async function loadTranscript(sessionId, container){
     msgs.forEach(m => {
       const line = document.createElement('div');
       line.className = 't-line ' + (m.role === 'user' ? 'user' : 'model');
-      line.innerHTML = `<span class="t-tag">${m.role === 'user' ? 'Tum:' : 'Bolo:'}</span>`;
+      line.innerHTML = `<span class="t-tag">${m.role === 'user' ? 'You:' : 'Uktio:'}</span>`;
       line.appendChild(document.createTextNode(m.content));
       container.appendChild(line);
     });
     const resumeBtn = document.createElement('button');
     resumeBtn.className = 'resume-btn';
-    resumeBtn.textContent = 'Isi chat ko resume karo';
+    resumeBtn.textContent = 'Resume this chat';
     resumeBtn.addEventListener('click', (e) => { e.stopPropagation(); window.location.href = 'chat.html?resume=' + sessionId; });
     container.appendChild(resumeBtn);
   } catch (err) {
-    container.innerHTML = `<div class="status-msg err">Load nahi ho paya: ${err.message}</div>`;
+    container.innerHTML = `<div class="status-msg err">**Failed to load. Please try again.**
+: ${err.message}</div>`;
   }
 }
 
@@ -102,7 +103,7 @@ const MIN_TURNS_FOR_ANALYSIS = 10;
 function renderList(sessions){
   sessionList.innerHTML = '';
   if (!sessions.length){
-    sessionList.innerHTML = '<div class="empty-state">Koi chat nahi mili.</div>';
+    sessionList.innerHTML = '<div class="empty-state">No chats found</div>';
     return;
   }
   sessions.forEach(s => {
