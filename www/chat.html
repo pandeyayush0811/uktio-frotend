@@ -101,15 +101,20 @@
   // the user hasn't finished it yet, or show a retry screen if the backend
   // is unreachable. Stashes the profile on window so the voice-engine
   // script below can build a personalized system prompt.
+  // Attach the drawer FIRST, before awaiting the auth guard below — the
+  // guard can take up to ~14s (retries on a slow/cold backend), and
+  // during that window the hamburger icon is already visible but had no
+  // click listener yet, which is why taps sometimes did nothing.
+  mountDrawer(document.getElementById('drawerTrigger'), null);
   const profile = await requireCompleteProfile();
   if (profile) window.__UKTIO_PROFILE = profile;
-  mountDrawer(document.getElementById('drawerTrigger'), null);
   initBackNav(null); // chat.html is the main hub — back minimizes the app, never exits
 </script>
 
 <script type="module">
 import { GoogleGenAI, Modality } from "https://esm.sh/@google/genai@1.30.0";
 import { API_KEY_STORAGE_KEY, PENDING_CHAT_SESSION_KEY, syncPendingChatSession, apiFetch } from './shared/auth.js';
+import { checkGeminiApiKey } from './shared/gemini-key-check.js';
 
 function buildBaseInstruction(userName){
 return `You are "Bolo" — a close friend and caring partner-like presence for the user (${userName}), who is helping him practice spoken English through natural conversation. Follow these rules exactly.
@@ -575,6 +580,23 @@ async function startSession(){
 
   isBusy = true;
   micBtn.disabled = true;
+
+  // Validate BEFORE attempting the live connection — the WebSocket's
+  // onopen fires as soon as the transport connects, which is BEFORE
+  // Gemini has actually checked the key server-side. Waiting for that
+  // meant the mic button flashed blue for a moment even with a bad key.
+  // Checking upfront means we simply never attempt the connection at all
+  // if the key is bad, so there's nothing to flash.
+  setStatus('API key check ho rahi hai...', null);
+  const keyCheck = await checkGeminiApiKey(apiKey);
+  if (keyCheck.status === 'invalid' || keyCheck.status === 'quota_exceeded'){
+    setStatus(keyCheck.message + ' — Settings mein check karo.', 'err');
+    isBusy = false;
+    micBtn.disabled = false;
+    return;
+  }
+  // 'network_error' or 'unknown' — don't hard-block on our own check
+  // failing; fall through and let the real connection attempt decide.
 
   setStatus('Gemini se connect ho raha hai...', null);
   try{

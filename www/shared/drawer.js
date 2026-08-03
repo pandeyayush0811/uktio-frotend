@@ -1,4 +1,4 @@
-import { apiFetch } from './auth.js';
+import { apiFetch, getCachedProfileBasic, setCachedProfileBasic } from './auth.js';
 
 // Mounts the hamburger drawer into the page and wires it to `triggerEl`.
 // activePage: 'profile' | 'chats' | null — highlights the matching nav item.
@@ -44,12 +44,25 @@ export async function mountDrawer(triggerEl, activePage){
   overlay.querySelector('.drawer-close').addEventListener('click', close);
   overlay.querySelector('#drawerMore').addEventListener('click', () => window.location.href = 'history.html');
 
+  // Cache-first: show the last-known name/email INSTANTLY (no network
+  // wait) if we have it, then quietly refetch in the background below
+  // and correct it if anything changed. This is why the drawer used to
+  // feel slow to open — it was always waiting on a fresh network call
+  // just to show your own name.
+  const cached = getCachedProfileBasic();
+  if (cached) {
+    overlay.querySelector('#drawerUserName').textContent = cached.name || cached.email || 'User';
+    overlay.querySelector('#drawerUserEmail').textContent = cached.email || '';
+  }
+
   // Fill in user + recent chats lazily, after the drawer is already visible/openable.
   try {
     const me = await apiFetch('/users/me');
-    overlay.querySelector('#drawerUserName').textContent = (me.profile && me.profile.name) || me.email || 'User';
+    const name = (me.profile && me.profile.name) || me.email || 'User';
+    overlay.querySelector('#drawerUserName').textContent = name;
     overlay.querySelector('#drawerUserEmail').textContent = me.email || '';
-  } catch (e) { /* silent — drawer still works without this */ }
+    setCachedProfileBasic({ name, email: me.email || '' }); // update cache for next time
+  } catch (e) { /* silent — cache (if any) already covered this, drawer still works without it */ }
 
   try {
     const data = await apiFetch('/chat/sessions');

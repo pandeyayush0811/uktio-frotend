@@ -51,6 +51,7 @@
     <div class="card">
       <label for="apiKey">Google Gemini API key</label>
       <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off">
+      <div class="status-msg" id="keyCheckMsg" style="min-height:1.2em;margin-top:2px;"></div>
       <p class="hint">
         The key is stored only on your phone/device (not on any server), so you won't need to enter it again the next time you open the app. It is sent directly to Google only when a connection is made. You can get a free API key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>. No credit card is required.
 
@@ -95,6 +96,7 @@ For your security: <strong>when you log out, the key is automatically deleted fr
 import './shared/config.js';
 import { requireAuthOrRedirect, apiFetch, logout, API_KEY_STORAGE_KEY } from './shared/auth.js';
 import { initBackNav } from './shared/back-nav.js';
+import { checkGeminiApiKey } from './shared/gemini-key-check.js';
 
 requireAuthOrRedirect();
 initBackNav('chat.html');
@@ -108,6 +110,7 @@ apiFetch('/users/me').then(data => {
 
 const apiKeyInput = document.getElementById('apiKey');
 const savedMsg = document.getElementById('savedMsg');
+const keyCheckMsg = document.getElementById('keyCheckMsg');
 const deleteKeyBtn = document.getElementById('deleteKeyBtn');
 
 function flashMsg(text){
@@ -118,8 +121,24 @@ function flashMsg(text){
 
 try {
   const savedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-  if (savedKey) apiKeyInput.value = savedKey;
+  if (savedKey) { apiKeyInput.value = savedKey; validateKeyDebounced(); }
 } catch (e) { console.warn('localStorage read failed', e); }
+
+let validateTimer = null;
+function validateKeyDebounced(){
+  clearTimeout(validateTimer);
+  const v = apiKeyInput.value.trim();
+  if (!v) { keyCheckMsg.textContent = ''; keyCheckMsg.className = 'status-msg'; return; }
+  keyCheckMsg.textContent = 'Checking...';
+  keyCheckMsg.className = 'status-msg';
+  validateTimer = setTimeout(async () => {
+    const result = await checkGeminiApiKey(v);
+    // Guard against a stale response landing after the user kept typing.
+    if (apiKeyInput.value.trim() !== v) return;
+    keyCheckMsg.textContent = result.message;
+    keyCheckMsg.className = 'status-msg ' + (result.status === 'valid' ? 'ok' : 'err');
+  }, 700);
+}
 
 apiKeyInput.addEventListener('input', () => {
   try {
@@ -127,12 +146,14 @@ apiKeyInput.addEventListener('input', () => {
     if (v) { localStorage.setItem(API_KEY_STORAGE_KEY, v); flashMsg('Saved'); }
     else localStorage.removeItem(API_KEY_STORAGE_KEY);
   } catch (e) { console.warn('localStorage write failed', e); }
+  validateKeyDebounced();
 });
 
 deleteKeyBtn.addEventListener('click', () => {
   apiKeyInput.value = '';
   try { localStorage.removeItem(API_KEY_STORAGE_KEY); } catch (e) {}
   flashMsg('Key deleted successfully');
+  keyCheckMsg.textContent = ''; keyCheckMsg.className = 'status-msg';
 });
 
 document.getElementById('logoutBtn').addEventListener('click', logout);

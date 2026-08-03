@@ -145,6 +145,31 @@ export function showConnectionError() {
 // can wipe it without importing settings.html's script.
 export const API_KEY_STORAGE_KEY = 'utkio_gemini_api_key';
 
+// Cache-first profile display (stale-while-revalidate): only the small,
+// non-sensitive display fields — never the full profile, and never
+// anything auth-related. Used so the drawer/profile header can render
+// instantly instead of waiting on a network round-trip every time.
+// ALWAYS pair a cache read with a background apiFetch to revalidate —
+// this is a display shortcut, not a replacement for the real data.
+const PROFILE_CACHE_KEY = 'utkio_profile_cache';
+
+export function getCachedProfileBasic() {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+export function setCachedProfileBasic({ name, email }) {
+  try {
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ name, email, cachedAt: Date.now() }));
+  } catch (e) { /* ignore */ }
+}
+
+function clearCachedProfileBasic() {
+  try { localStorage.removeItem(PROFILE_CACHE_KEY); } catch (e) { /* ignore */ }
+}
+
 // Local-write, batch-sync pattern for chat history: chat.html writes
 // turns here as the conversation happens (crash-safe), then pushes the
 // whole thing to the backend in one call when the session ends. If that
@@ -186,6 +211,7 @@ export async function syncPendingChatSession() {
 
 export function logout() {
   clearSession();
+  clearCachedProfileBasic();
   try { localStorage.removeItem(API_KEY_STORAGE_KEY); }
   catch (e) { console.warn('failed to clear API key on logout', e); }
   window.location.href = 'login.html';

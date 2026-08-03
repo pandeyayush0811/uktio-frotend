@@ -93,8 +93,7 @@ async function loadTranscript(sessionId, container){
     resumeBtn.addEventListener('click', (e) => { e.stopPropagation(); window.location.href = 'chat.html?resume=' + sessionId; });
     container.appendChild(resumeBtn);
   } catch (err) {
-    container.innerHTML = `<div class="status-msg err">**Failed to load. Please try again.**
-: ${err.message}</div>`;
+    container.innerHTML = `<div class="status-msg err">Failed to load. Please try again: ${err.message}</div>`;
   }
 }
 

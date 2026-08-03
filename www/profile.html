@@ -107,7 +107,7 @@
 
 <script type="module">
 import './shared/config.js';
-import { requireAuthOrRedirect, apiFetch } from './shared/auth.js';
+import { requireAuthOrRedirect, apiFetch, getCachedProfileBasic, setCachedProfileBasic } from './shared/auth.js';
 import { initBackNav } from './shared/back-nav.js';
 
 requireAuthOrRedirect();
@@ -187,6 +187,19 @@ const loadingMsg = document.getElementById('loadingMsg');
 const viewMode = document.getElementById('viewMode');
 const editForm = document.getElementById('editForm');
 
+// Cache-first: if we have a cached name/email from a previous visit,
+// show the header instantly instead of a blank "Loading..." screen.
+// The rest of the fields (age, goal, etc.) still wait for the real
+// fetch below — only name/email are cached, that's all the drawer
+// and this header actually need to feel instant.
+const cachedBasic = getCachedProfileBasic();
+if (cachedBasic) {
+  loadingMsg.style.display = 'none';
+  viewMode.classList.remove('hidden');
+  document.getElementById('vName').textContent = cachedBasic.name || '—';
+  document.getElementById('vEmail').textContent = cachedBasic.email || '—';
+}
+
 (async () => {
   try {
     const data = await apiFetch('/users/me');
@@ -195,9 +208,12 @@ const editForm = document.getElementById('editForm');
     loadingMsg.style.display = 'none';
     viewMode.classList.remove('hidden');
     renderView();
+    setCachedProfileBasic({ name: profile.name || '', email }); // keep cache fresh for next time
   } catch (err) {
-    loadingMsg.className = 'status-msg err';
-    loadingMsg.textContent = 'Profile load nahi ho paya: ' + err.message;
+    if (!cachedBasic) { // only show a hard error if we had nothing to fall back on
+      loadingMsg.className = 'status-msg err';
+      loadingMsg.textContent = 'Profile load nahi ho paya: ' + err.message;
+    }
   }
 })();
 
