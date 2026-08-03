@@ -18,16 +18,24 @@
     background:var(--card); border-radius:16px; padding:18px; margin-bottom:14px;
     box-shadow:0 6px 18px -12px rgba(60,60,120,0.2);
   }
-  .mistake-title{ font-weight:700; font-size:0.98rem; margin-bottom:8px; }
-  .mistake-explanation{ font-size:0.88rem; line-height:1.6; color:var(--ink); margin-bottom:12px; }
+  .mistake-title-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+  .mistake-title{ font-weight:700; font-size:0.98rem; }
+  .mistake-count{
+    font-size:0.72rem; font-weight:700; color:var(--accent); background:var(--accent-soft);
+    border-radius:999px; padding:2px 10px; white-space:nowrap;
+  }
+  .mistake-context{ font-size:0.86rem; line-height:1.6; color:var(--ink-dim); margin-bottom:8px; }
+  .mistake-reason{ font-size:0.88rem; line-height:1.6; color:var(--ink); margin-bottom:12px; font-weight:600; }
   .example-row{ display:flex; flex-direction:column; gap:2px; padding:10px 0; border-top:1px solid var(--line); font-size:0.86rem; }
   .example-row:first-of-type{ border-top:none; }
+  .example-hindi{ color:var(--ink-dim); font-size:0.82rem; }
   .example-wrong{ color:var(--bad); text-decoration:line-through; opacity:0.8; }
   .example-right{ color:#2e9e5b; font-weight:600; }
   .practice-tip-card{
-    background:var(--accent-soft); border-radius:16px; padding:18px; margin:16px 0 24px;
+    background:var(--accent-soft); border-radius:16px; padding:18px; margin:16px 0;
     font-size:0.9rem; line-height:1.6;
   }
+  .practice-tip-card:last-of-type{ margin-bottom:24px; }
   .practice-tip-card strong{ display:block; margin-bottom:6px; color:var(--accent); }
   .generate-state{ text-align:center; padding:60px 20px; }
   .generate-state svg{ color:var(--accent-orange); margin-bottom:16px; }
@@ -79,20 +87,26 @@ function renderReport(report){
   const strengthsHtml = (report.strengths || []).map(s => `<li>${s}</li>`).join('');
   const mistakesHtml = (report.mistakes || []).map(m => `
     <div class="mistake-card">
-      <div class="mistake-title">${m.title}</div>
-      <div class="mistake-explanation">${m.explanation}</div>
+      <div class="mistake-title-row">
+        <div class="mistake-title">${m.title}</div>
+        ${m.occurred_count ? `<span class="mistake-count">${m.occurred_count}× is session mein</span>` : ''}
+      </div>
+      ${m.context ? `<div class="mistake-context">${m.context}</div>` : ''}
+      ${m.reason ? `<div class="mistake-reason">${m.reason}</div>` : ''}
       ${(m.examples || []).map(ex => `
         <div class="example-row">
-          <span class="example-wrong">✗ ${ex.wrong}</span>
-          <span class="example-right">✓ ${ex.right}</span>
+          ${ex.hindi ? `<span class="example-hindi">${ex.hindi}</span>` : ''}
+          <span class="example-wrong">✗ ${ex.wrong_english}</span>
+          <span class="example-right">✓ ${ex.correct_english}</span>
         </div>`).join('')}
     </div>`).join('');
 
   content.innerHTML = `
-    <div class="report-summary">${report.summary}</div>
+    ${report.opening_line ? `<div class="report-summary">${report.opening_line}</div>` : ''}
     ${strengthsHtml ? `<div class="drawer-section-label" style="margin-top:20px;">What you did well</div><div class="report-summary"><ul class="strengths-list">${strengthsHtml}</ul></div>` : ''}
     ${mistakesHtml ? `<div class="drawer-section-label" style="margin-top:20px;">Areas to work on</div>${mistakesHtml}` : ''}
-    ${report.practice_tip ? `<div class="practice-tip-card"><strong>💡 Practice tip</strong>${report.practice_tip}</div>` : ''}
+    ${report.growth_note ? `<div class="practice-tip-card"><strong>🌱 Growth</strong>${report.growth_note}</div>` : ''}
+    ${report.focus_next ? `<div class="practice-tip-card"><strong>🎯 Next session mein focus karo</strong>${report.focus_next}</div>` : ''}
   `;
 }
 
