@@ -92,8 +92,10 @@
 <script type="module">
 import './shared/config.js';
 import { requireAuthOrRedirect, apiFetch, logout, API_KEY_STORAGE_KEY } from './shared/auth.js';
+import { initBackNav } from './shared/back-nav.js';
 
 requireAuthOrRedirect();
+initBackNav('chat.html');
 
 document.getElementById('telegramBtn').href =
   getComputedStyle(document.documentElement).getPropertyValue('--telegram-group-url').trim().replace(/^"|"$/g, '');

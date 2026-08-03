@@ -50,9 +50,11 @@
 import './shared/config.js';
 import { requireAuthOrRedirect, apiFetch } from './shared/auth.js';
 import { mountDrawer } from './shared/drawer.js';
+import { initBackNav } from './shared/back-nav.js';
 
 requireAuthOrRedirect();
 mountDrawer(document.getElementById('drawerTrigger'), 'chats');
+initBackNav('chat.html');
 
 document.getElementById('newChatFab').addEventListener('click', () => window.location.href = 'chat.html');
 

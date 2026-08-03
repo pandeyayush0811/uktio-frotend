@@ -12,6 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "@capacitor/android": "^8.5.0",
+    "@capacitor/app": "^8.0.0",
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
     "@capawesome/capacitor-google-sign-in": "^0.1.2"

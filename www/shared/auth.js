@@ -26,6 +26,44 @@ export function getAccessToken() {
   return s ? s.access_token : null;
 }
 
+// Supabase access tokens expire after 1 hour. Without this, anyone who
+// keeps the app open (or comes back after an hour) gets silently logged
+// out on their next request. This refreshes proactively — 60s before
+// expiry — using the long-lived refresh_token, so the user effectively
+// never gets logged out just from time passing.
+//
+// inFlightRefresh dedupes concurrent calls: if 3 apiFetch calls fire at
+// once near expiry, only ONE actual refresh request goes out; the other
+// two just await the same promise.
+let inFlightRefresh = null;
+
+async function getValidAccessToken() {
+  const s = getSession();
+  if (!s || !s.access_token) return null;
+
+  const expiresAtMs = (s.expires_at || 0) * 1000; // Supabase gives seconds, Date.now() is ms
+  const isExpiringSoon = expiresAtMs && (expiresAtMs - Date.now() < 60 * 1000);
+  if (!isExpiringSoon) return s.access_token;
+
+  if (!s.refresh_token) return s.access_token; // nothing we can do — let the request fail naturally
+
+  if (!inFlightRefresh) {
+    inFlightRefresh = fetch(cfg.BACKEND_URL + '/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: s.refresh_token })
+    })
+      .then(res => res.json().then(data => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (ok && data.session) { saveSession(data.session); return data.session.access_token; }
+        return s.access_token; // refresh failed — fall back to the old (soon-expired) token, let the call fail naturally rather than throwing here
+      })
+      .catch(() => s.access_token)
+      .finally(() => { inFlightRefresh = null; });
+  }
+  return inFlightRefresh;
+}
+
 // Call at the top of any page that requires login. Redirects to login.html
 // if there's no valid-looking session. Returns the session if present.
 export function requireAuthOrRedirect() {
@@ -40,7 +78,7 @@ export function requireAuthOrRedirect() {
 // Thin wrapper around fetch() that talks to YOUR backend (not Supabase
 // directly) and attaches the Supabase access token as a Bearer header.
 export async function apiFetch(path, options = {}) {
-  const token = getAccessToken();
+  const token = await getValidAccessToken();
   const res = await fetch(cfg.BACKEND_URL + path, {
     ...options,
     headers: {

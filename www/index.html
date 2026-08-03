@@ -22,6 +22,8 @@
 <script type="module">
 import './shared/config.js';
 import { getSession, goToPostAuthDestination, syncPendingChatSession } from './shared/auth.js';
+import { initBackNav } from './shared/back-nav.js';
+initBackNav(null);
 
 const splashStatus = document.getElementById('splashStatus');
 

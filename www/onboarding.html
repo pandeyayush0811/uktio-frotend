@@ -25,10 +25,12 @@
 <script type="module">
 import './shared/config.js';
 import { requireAuthOrRedirect, apiFetch } from './shared/auth.js';
+import { initBackNav } from './shared/back-nav.js';
 
 // Just needs a logged-in session — this page itself doesn't require
 // onboarding to already be complete (that would be circular).
 requireAuthOrRedirect();
+initBackNav(null, true); // mandatory — back button is disabled here
 
 const answers = {
   name: '', age: '', occupation_type: '', class_grade: '', profession: '', city: '',

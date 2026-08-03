@@ -15,9 +15,9 @@
 <body>
 <div class="wrap">
   <header class="topbar">
-    <button class="icon-btn" id="drawerTrigger" aria-label="Menu">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-    </button>
+    <a class="icon-btn" href="chat.html" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </a>
     <h1 class="app-title" style="font-size:1.3rem;">Profile</h1>
     <span style="width:38px;"></span>
   </header>
@@ -108,10 +108,10 @@
 <script type="module">
 import './shared/config.js';
 import { requireAuthOrRedirect, apiFetch } from './shared/auth.js';
-import { mountDrawer } from './shared/drawer.js';
+import { initBackNav } from './shared/back-nav.js';
 
 requireAuthOrRedirect();
-mountDrawer(document.getElementById('drawerTrigger'), 'profile');
+initBackNav('chat.html');
 
 const GOAL_OPTIONS = [
   { value: 'interview', label: 'Job interview / professional English' },

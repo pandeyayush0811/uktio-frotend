@@ -96,6 +96,7 @@
   import './shared/config.js';
   import { requireCompleteProfile } from './shared/auth.js';
   import { mountDrawer } from './shared/drawer.js';
+  import { initBackNav } from './shared/back-nav.js';
   // Guard: bounce to login if no/invalid session, or to onboarding.html if
   // the user hasn't finished it yet, or show a retry screen if the backend
   // is unreachable. Stashes the profile on window so the voice-engine
@@ -103,6 +104,7 @@
   const profile = await requireCompleteProfile();
   if (profile) window.__UKTIO_PROFILE = profile;
   mountDrawer(document.getElementById('drawerTrigger'), null);
+  initBackNav(null); // chat.html is the main hub — back minimizes the app, never exits
 </script>
 
 <script type="module">
