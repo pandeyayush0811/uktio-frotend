@@ -31,14 +31,6 @@
   .lp-line.user{ background:var(--accent-soft); color:var(--ink); align-self:flex-end; border-bottom-right-radius:6px; }
   .lp-line.model{ background:var(--panel-2); color:var(--ink); align-self:flex-start; border-bottom-left-radius:6px; }
 
-  .lp-mistake{
-    max-width:82%; align-self:flex-start; background:#fff7e6; border:1px solid #f3d489;
-    border-radius:14px; padding:10px 14px; font-size:0.82rem; line-height:1.5; color:var(--ink);
-  }
-  .lp-mistake .lp-m-wrong{ color:#b3261e; text-decoration:line-through; }
-  .lp-mistake .lp-m-correct{ color:#1e7a34; font-weight:600; }
-  .lp-mistake .lp-m-reason{ display:block; margin-top:4px; color:var(--ink-dim); }
-
   .lp-mic-dock{ position:relative; display:flex; align-items:center; justify-content:center; height:96px; margin-top:8px; }
   .lp-mic-btn{
     position:relative; z-index:1; width:74px; height:74px; border-radius:50%;
@@ -135,23 +127,13 @@ function runPracticeLite() {
     return div;
   }
 
-  function addMistakes(mistakes) {
-    if (!mistakes || !mistakes.length) return;
-    mistakes.forEach(m => {
-      const div = document.createElement('div');
-      div.className = 'lp-mistake';
-      div.innerHTML =
-        '<span class="lp-m-wrong">' + escapeHtml(m.wrong) + '</span> &rarr; ' +
-        '<span class="lp-m-correct">' + escapeHtml(m.correct) + '</span>' +
-        '<span class="lp-m-reason">' + escapeHtml(m.reason) + '</span>';
-      transcriptEl.appendChild(div);
-    });
-    transcriptEl.scrollTop = transcriptEl.scrollHeight;
-  }
-
-  function escapeHtml(s) {
-    return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-  }
+  // NOTE: there used to be an addMistakes() here for inline grammar
+  // corrections. Removed on purpose — that analysis used to be bundled
+  // into the same LLM call as the reply (pure latency cost, no benefit
+  // to an in-flow conversation), and it's gone server-side now too (see
+  // liteRoutes.js file header). Grammar feedback belongs in a separate,
+  // async "report" feature generated from the stored transcript later,
+  // not blocking a turn the user is actively waiting on.
 
   // ---- audio playback ----
   // NOTE for whoever reads this next: this used to assume raw 16-bit PCM
@@ -334,7 +316,7 @@ function runPracticeLite() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let sawReply = false;
+      let modelLine = null; // the single growing assistant bubble for this turn
 
       while (true) {
         const { done, value } = await reader.read();
@@ -358,13 +340,15 @@ function runPracticeLite() {
 
           if (eventName === 'user_text') {
             addLine('user', payload.text);
-          } else if (eventName === 'reply') {
-            // This is the actual latency win: text renders here, the
-            // MOMENT the LLM is done — audio hasn't even started
-            // synthesizing yet, but the user is already reading the reply.
-            addLine('model', payload.reply_text);
-            addMistakes(payload.mistakes);
-            sawReply = true;
+          } else if (eventName === 'reply_sentence') {
+            // This is the actual latency win: each sentence renders the
+            // MOMENT the model finishes generating it — not after the
+            // whole reply is done. One growing bubble per turn, sentence
+            // text appended as it streams in (audio for THIS sentence is
+            // already synthesizing in the background server-side by now).
+            if (!modelLine) modelLine = addLine('model', '');
+            modelLine.textContent += (modelLine.textContent ? ' ' : '') + payload.text;
+            transcriptEl.scrollTop = transcriptEl.scrollHeight;
             setStatus('Bol raha hoon...', 'busy');
           } else if (eventName === 'audio_chunk') {
             // Fire-and-forget on purpose: awaiting here would stall
@@ -381,7 +365,7 @@ function runPracticeLite() {
         }
       }
 
-      if (!sawReply) setStatus('Mic dabao aur bolna shuru karo', null);
+      if (!modelLine) setStatus('Mic dabao aur bolna shuru karo', null);
     } catch (err) {
       console.error(err);
       setStatus('Error: ' + err.message, 'err');
