@@ -14,29 +14,86 @@
   .strengths-list{ list-style:none; padding:0; margin:0; }
   .strengths-list li{ padding:8px 0 8px 26px; position:relative; font-size:0.9rem; }
   .strengths-list li::before{ content:"✓"; position:absolute; left:0; color:#2e9e5b; font-weight:700; }
-  .mistake-card{
-    background:var(--card); border-radius:16px; padding:18px; margin-bottom:14px;
-    box-shadow:0 6px 18px -12px rgba(60,60,120,0.2);
+
+  /* ---- Swipeable mistake-card deck ---- */
+  .deck-wrap{ margin-top:8px; }
+  .deck-progress{ display:flex; justify-content:center; gap:6px; margin:14px 0 4px; }
+  .deck-dot{ width:6px; height:6px; border-radius:50%; background:var(--line); transition:all 0.25s; }
+  .deck-dot.active{ width:18px; background:var(--accent); }
+  .deck-stage{
+    position:relative; height:420px; margin:10px 2px 4px; touch-action:pan-y;
   }
-  .mistake-title-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
-  .mistake-title{ font-weight:700; font-size:0.98rem; }
+  .deck-card{
+    position:absolute; inset:0; border-radius:22px; padding:22px 20px;
+    box-shadow:0 16px 34px -18px rgba(40,30,80,0.35);
+    display:flex; flex-direction:column; overflow-y:auto;
+    -webkit-user-select:none; user-select:none;
+    transition:transform 0.32s cubic-bezier(.22,.9,.32,1), opacity 0.32s;
+    will-change:transform;
+  }
+  .deck-card.behind{ transition:transform 0.32s ease, opacity 0.32s; pointer-events:none; }
+  .deck-card.dragging{ transition:none; }
+  .deck-card::-webkit-scrollbar{ display:none; }
+
+  .dc-c0{ background:linear-gradient(155deg,#FFE8D6,#FFF3E9); color:#7A3B18; }
+  .dc-c1{ background:linear-gradient(155deg,#DCEEFB,#EFF8FF); color:#1D5B8C; }
+  .dc-c2{ background:linear-gradient(155deg,#E3F5DE,#F2FBEF); color:#2E7D42; }
+  .dc-c3{ background:linear-gradient(155deg,#FBE4F0,#FFF1F8); color:#B23E77; }
+  .dc-c4{ background:linear-gradient(155deg,#EDE7FB,#F7F4FF); color:#5A3FA0; }
+
+  .mistake-title-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+  .mistake-title{ font-weight:800; font-size:1.05rem; }
   .mistake-count{
-    font-size:0.72rem; font-weight:700; color:var(--accent); background:var(--accent-soft);
-    border-radius:999px; padding:2px 10px; white-space:nowrap;
+    font-size:0.7rem; font-weight:700; background:rgba(255,255,255,0.65);
+    border-radius:999px; padding:3px 11px; white-space:nowrap;
   }
-  .mistake-context{ font-size:0.86rem; line-height:1.6; color:var(--ink-dim); margin-bottom:8px; }
-  .mistake-reason{ font-size:0.88rem; line-height:1.6; color:var(--ink); margin-bottom:12px; font-weight:600; }
-  .example-row{ display:flex; flex-direction:column; gap:2px; padding:10px 0; border-top:1px solid var(--line); font-size:0.86rem; }
-  .example-row:first-of-type{ border-top:none; }
-  .example-hindi{ color:var(--ink-dim); font-size:0.82rem; }
-  .example-wrong{ color:var(--bad); text-decoration:line-through; opacity:0.8; }
-  .example-right{ color:#2e9e5b; font-weight:600; }
+  .mistake-context{ font-size:0.86rem; line-height:1.55; opacity:0.85; margin-bottom:10px; }
+  .mistake-reason{ font-size:0.92rem; line-height:1.55; font-weight:700; margin-bottom:14px; }
+  .example-row{
+    display:flex; flex-direction:column; gap:3px; padding:11px 12px; margin-bottom:8px;
+    background:rgba(255,255,255,0.55); border-radius:12px; font-size:0.85rem;
+  }
+  .example-hindi{ opacity:0.7; font-size:0.8rem; }
+  .example-wrong{ color:#c0392b; text-decoration:line-through; opacity:0.85; }
+  .example-right{ color:#1e7a3d; font-weight:700; }
+
+  .deck-nav{ display:flex; justify-content:space-between; align-items:center; margin-top:14px; }
+  .deck-nav button{
+    background:var(--card); border:none; width:44px; height:44px; border-radius:50%;
+    box-shadow:0 6px 16px -8px rgba(30,30,60,0.25); display:flex; align-items:center; justify-content:center;
+    color:var(--ink); cursor:pointer;
+  }
+  .deck-nav button:disabled{ opacity:0.3; }
+  .deck-nav button svg{ width:20px; height:20px; }
+  .deck-hint{ font-size:0.74rem; color:var(--ink-dim); text-align:center; }
+
+  /* ---- Summary card (last card in the deck) ---- */
+  .summary-card{ background:linear-gradient(150deg,var(--accent),#8b7bff); color:#fff; text-align:center; justify-content:center; align-items:center; }
+  .score-ring{ position:relative; width:140px; height:140px; margin:6px auto 14px; }
+  .score-ring svg{ transform:rotate(-90deg); width:140px; height:140px; }
+  .score-ring circle{ fill:none; stroke-width:10; }
+  .score-ring .bg{ stroke:rgba(255,255,255,0.25); }
+  .score-ring .fg{ stroke:#fff; stroke-linecap:round; transition:stroke-dashoffset 1s cubic-bezier(.22,.9,.32,1); }
+  .score-num{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; font-weight:800;
+  }
+  .score-num .big{ font-size:2.1rem; line-height:1; }
+  .score-num .small{ font-size:0.72rem; opacity:0.85; margin-top:2px; }
+  .summary-card .growth-note{ font-size:0.9rem; line-height:1.6; opacity:0.95; }
+
   .practice-tip-card{
     background:var(--accent-soft); border-radius:16px; padding:18px; margin:16px 0;
     font-size:0.9rem; line-height:1.6;
   }
-  .practice-tip-card:last-of-type{ margin-bottom:24px; }
   .practice-tip-card strong{ display:block; margin-bottom:6px; color:var(--accent); }
+  .quiz-cta{ margin:8px 0 24px; }
+  .quiz-cta button{
+    width:100%; font-family:inherit; font-size:0.98rem; font-weight:700; padding:15px 20px;
+    border-radius:14px; border:none; background:linear-gradient(120deg,var(--accent),#8b7bff);
+    color:#fff; cursor:pointer; box-shadow:0 10px 24px -12px rgba(106,99,241,0.6);
+  }
+
   .generate-state{ text-align:center; padding:60px 20px; }
   .generate-state svg{ color:var(--accent-orange); margin-bottom:16px; }
   .generate-state p{ color:var(--ink-dim); font-size:0.88rem; margin-bottom:20px; }
@@ -83,10 +140,27 @@ function renderGenerateState(message, showButton){
   if (showButton) document.getElementById('genBtn').addEventListener('click', generateReport);
 }
 
-function renderReport(report){
-  const strengthsHtml = (report.strengths || []).map(s => `<li>${s}</li>`).join('');
-  const mistakesHtml = (report.mistakes || []).map(m => `
-    <div class="mistake-card">
+// ---- Swipeable deck: renders mistake cards + a final animated summary card ----
+function buildDeckCardHtml(card, colorClass){
+  if (card.kind === 'summary'){
+    const circumference = 2 * Math.PI * 60;
+    return `
+      <div class="deck-card summary-card" data-kind="summary">
+        <div class="score-ring">
+          <svg viewBox="0 0 140 140">
+            <circle class="bg" cx="70" cy="70" r="60"/>
+            <circle class="fg" cx="70" cy="70" r="60"
+              stroke-dasharray="${circumference}" stroke-dashoffset="${circumference}"
+              data-target-offset="${circumference * (1 - card.score / 10)}"/>
+          </svg>
+          <div class="score-num"><span class="big" data-count-target="${card.score}">0</span><span class="small">/ 10 confidence</span></div>
+        </div>
+        ${card.growth ? `<div class="growth-note">🌱 ${card.growth}</div>` : ''}
+      </div>`;
+  }
+  const m = card.mistake;
+  return `
+    <div class="deck-card ${colorClass}">
       <div class="mistake-title-row">
         <div class="mistake-title">${m.title}</div>
         ${m.occurred_count ? `<span class="mistake-count">${m.occurred_count}× is session mein</span>` : ''}
@@ -99,15 +173,134 @@ function renderReport(report){
           <span class="example-wrong">✗ ${ex.wrong_english}</span>
           <span class="example-right">✓ ${ex.correct_english}</span>
         </div>`).join('')}
-    </div>`).join('');
+    </div>`;
+}
+
+function mountDeck(container, cards){
+  const stage = container.querySelector('.deck-stage');
+  const dotsEl = container.querySelector('.deck-progress');
+  const prevBtn = container.querySelector('.deck-prev');
+  const nextBtn = container.querySelector('.deck-next');
+  let index = 0;
+  let animatedSummary = false;
+  const COLORS = ['dc-c0', 'dc-c1', 'dc-c2', 'dc-c3', 'dc-c4'];
+
+  dotsEl.innerHTML = cards.map((_, i) => `<span class="deck-dot${i === 0 ? ' active' : ''}"></span>`).join('');
+
+  function animateSummaryIfNeeded(cardEl){
+    if (animatedSummary) return;
+    const circle = cardEl.querySelector('.fg');
+    const numEl = cardEl.querySelector('[data-count-target]');
+    if (!circle || !numEl) return;
+    animatedSummary = true;
+    requestAnimationFrame(() => { circle.style.strokeDashoffset = circle.dataset.targetOffset; });
+    const target = parseInt(numEl.dataset.countTarget, 10) || 0;
+    const start = performance.now();
+    const dur = 900;
+    function tick(now){
+      const p = Math.min(1, (now - start) / dur);
+      numEl.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function render(){
+    stage.innerHTML = '';
+    [1, 0].forEach(offset => {
+      const i = index + offset;
+      if (i >= cards.length) return;
+      const card = cards[i];
+      const colorClass = card.kind === 'summary' ? '' : COLORS[i % COLORS.length];
+      const wrap = document.createElement('div');
+      wrap.innerHTML = buildDeckCardHtml(card, colorClass);
+      const el = wrap.firstElementChild;
+      const tilt = (i % 2 === 0 ? -2.5 : 2.5);
+      if (offset === 1){
+        el.classList.add('behind');
+        el.style.transform = `translateY(14px) scale(0.94) rotate(0deg)`;
+        el.style.opacity = '0.7';
+      } else {
+        el.style.transform = `translateY(0) scale(1) rotate(${tilt}deg)`;
+        attachDrag(el);
+      }
+      stage.appendChild(el);
+    });
+    dotsEl.querySelectorAll('.deck-dot').forEach((d, i) => d.classList.toggle('active', i === index));
+    prevBtn.disabled = index === 0;
+    nextBtn.disabled = index === cards.length - 1;
+    const top = stage.querySelector('.deck-card:not(.behind)');
+    if (top && cards[index].kind === 'summary') animateSummaryIfNeeded(top);
+  }
+
+  function goTo(newIndex){
+    index = Math.max(0, Math.min(cards.length - 1, newIndex));
+    render();
+  }
+
+  function attachDrag(el){
+    let startX = 0, dx = 0, dragging = false;
+    const onDown = (e) => {
+      dragging = true; el.classList.add('dragging');
+      startX = (e.touches ? e.touches[0].clientX : e.clientX);
+    };
+    const onMove = (e) => {
+      if (!dragging) return;
+      const x = (e.touches ? e.touches[0].clientX : e.clientX);
+      dx = x - startX;
+      const rot = dx / 18;
+      el.style.transform = `translateX(${dx}px) rotate(${rot}deg)`;
+      el.style.opacity = String(1 - Math.min(0.5, Math.abs(dx) / 400));
+    };
+    const onUp = () => {
+      if (!dragging) return;
+      dragging = false; el.classList.remove('dragging');
+      if (dx < -70 && index < cards.length - 1){ goTo(index + 1); }
+      else if (dx > 70 && index > 0){ goTo(index - 1); }
+      else { render(); }
+      dx = 0;
+    };
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointerleave', onUp);
+  }
+
+  prevBtn.addEventListener('click', () => goTo(index - 1));
+  nextBtn.addEventListener('click', () => goTo(index + 1));
+  render();
+}
+
+function renderReport(report){
+  const strengthsHtml = (report.strengths || []).map(s => `<li>${s}</li>`).join('');
+  const mistakes = report.mistakes || [];
+  const deckCards = mistakes.map(m => ({ kind: 'mistake', mistake: m }));
+  deckCards.push({ kind: 'summary', score: report.confidence_score || 5, growth: report.growth_note || '' });
+  const hasQuiz = Array.isArray(report.quiz) && report.quiz.length > 0;
 
   content.innerHTML = `
     ${report.opening_line ? `<div class="report-summary">${report.opening_line}</div>` : ''}
     ${strengthsHtml ? `<div class="drawer-section-label" style="margin-top:20px;">What you did well</div><div class="report-summary"><ul class="strengths-list">${strengthsHtml}</ul></div>` : ''}
-    ${mistakesHtml ? `<div class="drawer-section-label" style="margin-top:20px;">Areas to work on</div>${mistakesHtml}` : ''}
-    ${report.growth_note ? `<div class="practice-tip-card"><strong>🌱 Growth</strong>${report.growth_note}</div>` : ''}
+    <div class="drawer-section-label" style="margin-top:20px;">Areas to work on — swipe karo →</div>
+    <div class="deck-wrap">
+      <div class="deck-progress"></div>
+      <div class="deck-stage"></div>
+      <div class="deck-nav">
+        <button class="deck-prev" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <span class="deck-hint">card ko swipe ya drag karo</span>
+        <button class="deck-next" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+      </div>
+    </div>
     ${report.focus_next ? `<div class="practice-tip-card"><strong>🎯 Next session mein focus karo</strong>${report.focus_next}</div>` : ''}
+    ${hasQuiz ? `<div class="quiz-cta"><button id="startQuizBtn">Quiz shuru karo — 2 min mein confirm karo kya seekha 🎯</button></div>` : ''}
   `;
+
+  if (deckCards.length) mountDeck(content, deckCards);
+  if (hasQuiz){
+    document.getElementById('startQuizBtn').addEventListener('click', () => {
+      window.location.href = 'quiz.html?session=' + encodeURIComponent(sessionId);
+    });
+  }
 }
 
 async function generateReport(){
