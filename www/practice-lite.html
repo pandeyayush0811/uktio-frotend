@@ -95,7 +95,7 @@
 
 <script type="module">
 import './shared/config.js';
-import { requireAuthOrRedirect, apiFetch } from './shared/auth.js';
+import { requireAuthOrRedirect, apiFetch, getValidAccessToken } from './shared/auth.js';
 import { mountDrawer } from './shared/drawer.js';
 import { initBackNav } from './shared/back-nav.js';
 
@@ -153,34 +153,46 @@ function runPracticeLite() {
     return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
 
-  // ---- audio playback (Gemini returns raw 16-bit PCM @ 24kHz) ----
-  function base64ToInt16(base64) {
+  // ---- audio playback ----
+  // NOTE for whoever reads this next: this used to assume raw 16-bit PCM
+  // @ 24kHz, copy-pasted from chat.html's Gemini Live handling. That was
+  // wrong for this page — the lite backend uses Sarvam TTS, which returns
+  // an actual WAV FILE (proper 44-byte RIFF header + its own sample rate),
+  // not a bare PCM stream. Treating a WAV file as raw PCM samples (which
+  // is what base64ToInt16+createBuffer(...,24000) did) plays back at the
+  // wrong pitch/speed and includes ~22 garbage header samples as noise at
+  // the start of every chunk. decodeAudioData() below reads the WAV
+  // header properly instead of guessing the format.
+  //
+  // Also now plays per-SENTENCE chunks as they stream in from
+  // /turn/stream (instead of one big blob at the end) — nextPlayTime
+  // scheduling (same pattern chat.html uses for Gemini's audio) queues
+  // each chunk to start exactly when the previous one ends, so sentences
+  // play back-to-back with no gap and no need to wait for the whole reply.
+  let nextPlayTime = 0;
+
+  function base64ToArrayBuffer(base64) {
     const binary = atob(base64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new Int16Array(bytes.buffer);
+    return bytes.buffer;
   }
 
-  function playReplyAudio(base64Data) {
-    return new Promise((resolve) => {
-      if (!base64Data) { resolve(); return; }
-      try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-        const int16 = base64ToInt16(base64Data);
-        const float32 = new Float32Array(int16.length);
-        for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
-        const buffer = audioCtx.createBuffer(1, float32.length, 24000);
-        buffer.copyToChannel(float32, 0);
-        const src = audioCtx.createBufferSource();
-        src.buffer = buffer;
-        src.connect(audioCtx.destination);
-        src.onended = resolve;
-        src.start();
-      } catch (e) {
-        console.error('playback error', e);
-        resolve();
-      }
-    });
+  async function enqueueReplyAudioChunk(base64Data) {
+    if (!base64Data) return;
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioCtx.decodeAudioData(base64ToArrayBuffer(base64Data));
+      const src = audioCtx.createBufferSource();
+      src.buffer = audioBuffer;
+      src.connect(audioCtx.destination);
+      const now = audioCtx.currentTime;
+      if (nextPlayTime < now) nextPlayTime = now + 0.03;
+      src.start(nextPlayTime);
+      nextPlayTime += audioBuffer.duration;
+    } catch (e) {
+      console.error('audio chunk decode/playback error', e);
+    }
   }
 
   // ---- one-shot session bootstrap ----
@@ -294,18 +306,82 @@ function runPracticeLite() {
 
       const wavBase64 = pcmToWavBase64(merged, PCM_SAMPLE_RATE);
 
-      const result = await apiFetch('/lite/sessions/' + sessionId + '/turn', {
+      // Streaming endpoint — can't go through apiFetch() here, since
+      // apiFetch reads the whole response as one JSON blob and this is
+      // Server-Sent-Events framing instead. Same auth-token handling
+      // apiFetch does internally (getValidAccessToken refreshes it if
+      // it's about to expire), just done manually so the response body
+      // can be read as a stream.
+      const token = await getValidAccessToken();
+      const res = await fetch(window.UKTIO_CONFIG.BACKEND_URL + '/lite/sessions/' + sessionId + '/turn/stream', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {})
+        },
         body: JSON.stringify({ audio_base64: wavBase64, mime_type: 'audio/wav' })
       });
 
-      addLine('user', result.user_text);
-      addLine('model', result.reply_text);
-      addMistakes(result.mistakes);
+      // Auth/validation failures happen BEFORE the server starts
+      // streaming, so those still come back as a normal JSON error
+      // response — only a 200 with text/event-stream is the SSE path.
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok || !contentType.includes('text/event-stream')) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || ('Request failed (' + res.status + ')'));
+      }
 
-      setStatus('Bol raha hoon...', 'busy');
-      await playReplyAudio(result.audio_base64);
-      setStatus('Mic dabao aur bolna shuru karo', null);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let sawReply = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let sepIndex;
+        while ((sepIndex = buffer.indexOf('\n\n')) !== -1) {
+          const rawEvent = buffer.slice(0, sepIndex);
+          buffer = buffer.slice(sepIndex + 2);
+
+          let eventName = 'message';
+          let dataStr = '';
+          rawEvent.split('\n').forEach(line => {
+            if (line.startsWith('event: ')) eventName = line.slice(7);
+            else if (line.startsWith('data: ')) dataStr += line.slice(6);
+          });
+          if (!dataStr) continue;
+          let payload;
+          try { payload = JSON.parse(dataStr); } catch (e) { continue; }
+
+          if (eventName === 'user_text') {
+            addLine('user', payload.text);
+          } else if (eventName === 'reply') {
+            // This is the actual latency win: text renders here, the
+            // MOMENT the LLM is done — audio hasn't even started
+            // synthesizing yet, but the user is already reading the reply.
+            addLine('model', payload.reply_text);
+            addMistakes(payload.mistakes);
+            sawReply = true;
+            setStatus('Bol raha hoon...', 'busy');
+          } else if (eventName === 'audio_chunk') {
+            // Fire-and-forget on purpose: awaiting here would stall
+            // reading the NEXT sentence's network chunk behind this
+            // one's decode+schedule, which defeats the point of
+            // streaming. enqueueReplyAudioChunk's own nextPlayTime
+            // bookkeeping keeps playback order correct regardless.
+            enqueueReplyAudioChunk(payload.audio_base64);
+          } else if (eventName === 'done') {
+            setStatus('Mic dabao aur bolna shuru karo', null);
+          } else if (eventName === 'error') {
+            throw new Error(payload.error || 'Server error');
+          }
+        }
+      }
+
+      if (!sawReply) setStatus('Mic dabao aur bolna shuru karo', null);
     } catch (err) {
       console.error(err);
       setStatus('Error: ' + err.message, 'err');
@@ -317,8 +393,11 @@ function runPracticeLite() {
 
   micBtn.addEventListener('click', () => { isRecording ? stopRecording() : startRecording(); });
 
+  // Make sure the native mic (and its event listener) actually stop if
+  // the user navigates away mid-recording — otherwise MicCapture keeps
+  // running in the background after this page is gone.
   window.addEventListener('beforeunload', () => {
-    if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+    if (isRecording) stopRecording();
   });
 }
 </script>

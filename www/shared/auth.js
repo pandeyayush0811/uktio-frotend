@@ -37,7 +37,13 @@ export function getAccessToken() {
 // two just await the same promise.
 let inFlightRefresh = null;
 
-async function getValidAccessToken() {
+// Exported (unlike the rest of this refresh machinery) specifically for
+// practice-lite.html's streamed /lite/.../turn/stream call — that one
+// can't go through apiFetch() because apiFetch always parses the
+// response as one JSON blob, which breaks an SSE stream. Any streaming
+// caller should grab a fresh token with this the same way apiFetch does
+// internally, instead of reading getAccessToken()'s possibly-stale value.
+export async function getValidAccessToken() {
   const s = getSession();
   if (!s || !s.access_token) return null;
 
