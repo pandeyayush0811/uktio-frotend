@@ -6,5 +6,5 @@
 window.UKTIO_CONFIG = {
   SUPABASE_URL: 'https://pwdglktwuquoswqoyely.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB3ZGdsa3R3dXF1b3N3cW95ZWx5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2MTYyODAsImV4cCI6MjEwMTE5MjI4MH0.GdwAJAXx8x98QvkvW1HAZh7F3PIZiV3Uqeoqm54ohRo',
-  BACKEND_URL: 'https://uktio.onrender.com' // no trailing slash https://uktio.onrender.com/
+  BACKEND_URL: 'https://uktio-backend.onrender.com' // no trailing slash
 };
