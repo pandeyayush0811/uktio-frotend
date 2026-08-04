@@ -5,10 +5,16 @@
 // Supabase RLS policies permit, nothing more.
 
 // Testing two backends side by side (main production service vs. this
-// branch's separate service for the new /lite streaming feature)? Don't
+// branch's separate service for the /lite streaming feature)? Don't
 // retype/comment-swap the URL every time — just flip this one word and
 // reload (browser preview: instant; native app: `npx cap sync android`
 // then rebuild, since www/ gets copied into the Android project).
+//
+// IMPORTANT: 'main' (uktio.onrender.com) does NOT have the /lite routes
+// deployed — it's the production service for the rest of the app only.
+// Keep this on 'lite' until the lite branch is merged into main and
+// redeployed there; switching this to 'main' right now would make every
+// /lite/* call fail outright, not just run slower.
 const ACTIVE_BACKEND = 'lite'; // 'main' | 'lite'
 
 const BACKENDS = {
