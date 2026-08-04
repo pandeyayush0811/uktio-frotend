@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utkio — Quick Practice</title>
+<link rel="stylesheet" href="shared/style.css">
+<style>
+  .lp-status-row{ display:flex; align-items:center; justify-content:center; gap:8px; margin:18px 0 20px; }
+  .lp-dot{ width:9px; height:9px; border-radius:50%; background:var(--ink-dim); flex-shrink:0; }
+  .lp-dot.live{ background:#2fbf71; }
+  .lp-dot.err{ background:#e5484d; }
+  .lp-dot.busy{ background:var(--accent); }
+  #lpStatusText{ font-size:0.95rem; font-weight:500; }
+
+  .lp-card{
+    flex:1; min-height:0; background:var(--card); border-radius:26px; padding:20px 16px;
+    box-shadow:0 20px 40px -20px rgba(60,60,120,0.18); display:flex; flex-direction:column; overflow:hidden;
+  }
+  .lp-transcript{
+    flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column;
+    gap:14px; padding-right:2px; padding-bottom:4px; scroll-behavior:smooth;
+    scrollbar-width:none; -ms-overflow-style:none;
+  }
+  .lp-transcript::-webkit-scrollbar{ display:none; }
+  .lp-transcript:empty::before{
+    content:"Tap the mic and say something in English — Bolo Lite will reply and gently correct you";
+    color:var(--ink-dim); font-size:0.85rem; font-style:italic; margin:auto; text-align:center; padding:0 20px;
+  }
+  .lp-line{ padding:12px 16px; border-radius:16px; font-size:0.95rem; line-height:1.5; max-width:82%; }
+  .lp-line.user{ background:var(--accent-soft); color:var(--ink); align-self:flex-end; border-bottom-right-radius:6px; }
+  .lp-line.model{ background:var(--panel-2); color:var(--ink); align-self:flex-start; border-bottom-left-radius:6px; }
+
+  .lp-mistake{
+    max-width:82%; align-self:flex-start; background:#fff7e6; border:1px solid #f3d489;
+    border-radius:14px; padding:10px 14px; font-size:0.82rem; line-height:1.5; color:var(--ink);
+  }
+  .lp-mistake .lp-m-wrong{ color:#b3261e; text-decoration:line-through; }
+  .lp-mistake .lp-m-correct{ color:#1e7a34; font-weight:600; }
+  .lp-mistake .lp-m-reason{ display:block; margin-top:4px; color:var(--ink-dim); }
+
+  .lp-mic-dock{ position:relative; display:flex; align-items:center; justify-content:center; height:96px; margin-top:8px; }
+  .lp-mic-btn{
+    position:relative; z-index:1; width:74px; height:74px; border-radius:50%;
+    background:var(--card); border:none; box-shadow:0 6px 16px -6px rgba(30,30,60,0.18);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    transition:transform 0.15s, box-shadow 0.2s, background 0.2s;
+    -webkit-tap-highlight-color: transparent; user-select:none; touch-action:manipulation; outline:none;
+  }
+  .lp-mic-btn:hover:not(:disabled){ transform:scale(1.04); }
+  .lp-mic-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  .lp-mic-btn svg{ width:28px; height:28px; color:var(--accent); }
+  .lp-mic-btn.recording{
+    background:#e5484d;
+    box-shadow:0 0 0 14px rgba(229,72,77,0.16), 0 0 26px 6px rgba(229,72,77,0.45);
+  }
+  .lp-mic-btn.recording svg{ color:#fff; }
+
+  .lp-badge{
+    display:inline-block; margin-left:8px; font-size:0.68rem; font-weight:700; letter-spacing:0.02em;
+    background:var(--accent-soft); color:var(--accent); border-radius:999px; padding:2px 9px; vertical-align:middle;
+  }
+  footer.lp-footer{ margin-top:16px; color:var(--ink-dim); font-size:0.72rem; line-height:1.6; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap" style="display:flex;flex-direction:column;height:100vh;padding:14px 16px 18px;box-sizing:border-box;">
+  <header class="topbar">
+    <button class="icon-btn" id="lpDrawerTrigger" aria-label="Menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div style="font-weight:600;">Quick Practice <span class="lp-badge">LITE</span></div>
+    <button class="icon-btn" id="lpBackBtn" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </header>
+
+  <div class="lp-status-row">
+    <div class="lp-dot" id="lpDot"></div>
+    <div id="lpStatusText">Shuru karne ke liye mic dabao</div>
+  </div>
+
+  <div class="lp-card">
+    <div class="lp-transcript" id="lpTranscript"></div>
+  </div>
+
+  <div class="lp-mic-dock">
+    <button class="lp-mic-btn" id="lpMicBtn" aria-label="Record">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+    </button>
+  </div>
+
+  <footer class="lp-footer">Bina apni API key ke — isi app ke through chalta hai. Turn-based hai (real-time voice nahi), thodi der ruk kar reply aata hai.</footer>
+</div>
+
+<script type="module">
+import './shared/config.js';
+import { requireAuthOrRedirect, apiFetch } from './shared/auth.js';
+import { mountDrawer } from './shared/drawer.js';
+import { initBackNav } from './shared/back-nav.js';
+
+// Guard: same login check every other page uses. Nothing shared beyond this.
+const authSession = requireAuthOrRedirect();
+if (authSession) {
+  mountDrawer(document.getElementById('lpDrawerTrigger'), null);
+  initBackNav(document.getElementById('lpBackBtn'));
+  runPracticeLite();
+}
+
+function runPracticeLite() {
+  const transcriptEl = document.getElementById('lpTranscript');
+  const micBtn = document.getElementById('lpMicBtn');
+  const dot = document.getElementById('lpDot');
+  const statusText = document.getElementById('lpStatusText');
+
+  let sessionId = null;
+  let isRecording = false;
+  let isBusy = false;
+  let audioCtx = null;
+  let micListenerHandle = null;
+  let pcmChunks = []; // Uint8Array pieces of raw 16-bit PCM @ 16kHz from the native plugin
+  const PCM_SAMPLE_RATE = 16000; // must match MicCapturePlugin's output rate
+
+  function setStatus(text, kind) {
+    statusText.textContent = text;
+    dot.className = 'lp-dot' + (kind ? ' ' + kind : '');
+  }
+
+  function addLine(role, text) {
+    const div = document.createElement('div');
+    div.className = 'lp-line ' + (role === 'user' ? 'user' : 'model');
+    div.textContent = text;
+    transcriptEl.appendChild(div);
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+    return div;
+  }
+
+  function addMistakes(mistakes) {
+    if (!mistakes || !mistakes.length) return;
+    mistakes.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'lp-mistake';
+      div.innerHTML =
+        '<span class="lp-m-wrong">' + escapeHtml(m.wrong) + '</span> &rarr; ' +
+        '<span class="lp-m-correct">' + escapeHtml(m.correct) + '</span>' +
+        '<span class="lp-m-reason">' + escapeHtml(m.reason) + '</span>';
+      transcriptEl.appendChild(div);
+    });
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  // ---- audio playback (Gemini returns raw 16-bit PCM @ 24kHz) ----
+  function base64ToInt16(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Int16Array(bytes.buffer);
+  }
+
+  function playReplyAudio(base64Data) {
+    return new Promise((resolve) => {
+      if (!base64Data) { resolve(); return; }
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+        const int16 = base64ToInt16(base64Data);
+        const float32 = new Float32Array(int16.length);
+        for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+        const buffer = audioCtx.createBuffer(1, float32.length, 24000);
+        buffer.copyToChannel(float32, 0);
+        const src = audioCtx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(audioCtx.destination);
+        src.onended = resolve;
+        src.start();
+      } catch (e) {
+        console.error('playback error', e);
+        resolve();
+      }
+    });
+  }
+
+  // ---- one-shot session bootstrap ----
+  async function ensureSession() {
+    if (sessionId) return sessionId;
+    setStatus('Session shuru ho rahi hai...', 'busy');
+    const data = await apiFetch('/lite/sessions', { method: 'POST', body: JSON.stringify({}) });
+    sessionId = data.session_id;
+    setStatus('Mic dabao aur bolna shuru karo', null);
+    return sessionId;
+  }
+
+  // ---- recording via the SAME native MicCapture plugin chat.html already
+  // uses (Android WebView's own getUserMedia/MediaRecorder don't reliably
+  // work, which is exactly why that plugin exists) — reused as-is, no
+  // native code touched, this page just listens to the same 'audioChunk' event.
+  function getMicCapturePlugin() {
+    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.MicCapture) {
+      throw new Error('MicCapture native plugin nahi mila — app ko native build se chalao (browser preview mein nahi chalega).');
+    }
+    return window.Capacitor.Plugins.MicCapture;
+  }
+
+  function base64ToUint8(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function uint8ToBase64(bytes) {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  // Wraps raw 16-bit PCM samples in a minimal WAV header so Groq's STT
+  // (which expects a real audio file, not a bare PCM stream) can read it.
+  function pcmToWavBase64(pcmBytes, sampleRate) {
+    const header = new ArrayBuffer(44);
+    const dv = new DataView(header);
+    const dataSize = pcmBytes.length;
+    const writeStr = (offset, str) => { for (let i = 0; i < str.length; i++) dv.setUint8(offset + i, str.charCodeAt(i)); };
+    writeStr(0, 'RIFF'); dv.setUint32(4, 36 + dataSize, true); writeStr(8, 'WAVE');
+    writeStr(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); // PCM
+    dv.setUint16(22, 1, true); // mono
+    dv.setUint32(24, sampleRate, true);
+    dv.setUint32(28, sampleRate * 2, true); // byte rate (16-bit mono)
+    dv.setUint16(32, 2, true); // block align
+    dv.setUint16(34, 16, true); // bits per sample
+    writeStr(36, 'data'); dv.setUint32(40, dataSize, true);
+
+    const wavBytes = new Uint8Array(44 + dataSize);
+    wavBytes.set(new Uint8Array(header), 0);
+    wavBytes.set(pcmBytes, 44);
+    return uint8ToBase64(wavBytes);
+  }
+
+  async function startRecording() {
+    if (isRecording || isBusy) return;
+    isBusy = true;
+    micBtn.disabled = true;
+    try {
+      await ensureSession();
+      const MicCapture = getMicCapturePlugin();
+      pcmChunks = [];
+      micListenerHandle = await MicCapture.addListener('audioChunk', (data) => {
+        if (!data || !data.audio) return;
+        pcmChunks.push(base64ToUint8(data.audio));
+      });
+      await MicCapture.start();
+      isRecording = true;
+      micBtn.classList.add('recording');
+      setStatus('Sun raha hoon... (rokne ke liye mic dabao)', 'live');
+    } catch (err) {
+      console.error(err);
+      setStatus('Mic access nahi mila: ' + err.message, 'err');
+    } finally {
+      isBusy = false;
+      micBtn.disabled = false;
+    }
+  }
+
+  async function stopRecording() {
+    if (!isRecording) return;
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    try {
+      const MicCapture = getMicCapturePlugin();
+      await MicCapture.stop();
+    } catch (e) { /* ignore */ }
+    if (micListenerHandle) { try { await micListenerHandle.remove(); } catch (e) {} micListenerHandle = null; }
+    await handleRecordingStop();
+  }
+
+  async function handleRecordingStop() {
+    const totalLen = pcmChunks.reduce((n, c) => n + c.length, 0);
+    if (!totalLen) { setStatus('Kuch record nahi hua, phir try karo', null); return; }
+
+    isBusy = true;
+    micBtn.disabled = true;
+    setStatus('Samajh raha hoon...', 'busy');
+    try {
+      const merged = new Uint8Array(totalLen);
+      let offset = 0;
+      pcmChunks.forEach(c => { merged.set(c, offset); offset += c.length; });
+      pcmChunks = [];
+
+      const wavBase64 = pcmToWavBase64(merged, PCM_SAMPLE_RATE);
+
+      const result = await apiFetch('/lite/sessions/' + sessionId + '/turn', {
+        method: 'POST',
+        body: JSON.stringify({ audio_base64: wavBase64, mime_type: 'audio/wav' })
+      });
+
+      addLine('user', result.user_text);
+      addLine('model', result.reply_text);
+      addMistakes(result.mistakes);
+
+      setStatus('Bol raha hoon...', 'busy');
+      await playReplyAudio(result.audio_base64);
+      setStatus('Mic dabao aur bolna shuru karo', null);
+    } catch (err) {
+      console.error(err);
+      setStatus('Error: ' + err.message, 'err');
+    } finally {
+      isBusy = false;
+      micBtn.disabled = false;
+    }
+  }
+
+  micBtn.addEventListener('click', () => { isRecording ? stopRecording() : startRecording(); });
+
+  window.addEventListener('beforeunload', () => {
+    if (mediaStream) mediaStream.getTracks().forEach(t => t.stop());
+  });
+}
+</script>
+</body>
+</html>
