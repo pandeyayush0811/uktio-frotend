@@ -15,11 +15,12 @@
 // Keep this on 'lite' until the lite branch is merged into main and
 // redeployed there; switching this to 'main' right now would make every
 // /lite/* call fail outright, not just run slower.
-const ACTIVE_BACKEND = 'lite'; // 'main' | 'lite'
+const ACTIVE_BACKEND = 'local'; // 'main' | 'lite'
 
 const BACKENDS = {
   main: 'https://uktio.onrender.com',
-  lite: 'https://uktio-backend.onrender.com'
+  lite: 'https://uktio-backend.onrender.com',
+  local: 'http://10.215.18.30:3999' 
 };
 
 window.UKTIO_CONFIG = {
