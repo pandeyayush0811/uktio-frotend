@@ -17,11 +17,12 @@
     background:var(--accent-soft); border-radius:999px; padding:4px 14px;
   }
 
-  .qstage{ position:relative; flex:1; min-height:0; margin:12px 2px 6px; touch-action:pan-y; }
+  .qstage{ position:relative; flex:1; min-height:0; margin:12px 2px 6px; touch-action:none; }
   .qcard{
     position:absolute; inset:0; border-radius:24px; padding:26px 22px;
     box-shadow:0 16px 34px -18px rgba(40,30,80,0.35);
     display:flex; flex-direction:column; will-change:transform;
+    -webkit-user-select:none; user-select:none; touch-action:none;
     transition:transform 0.32s cubic-bezier(.22,.9,.32,1), opacity 0.32s;
   }
   .qcard.dragging{ transition:none; }
@@ -158,7 +159,7 @@ function renderYesNo(q, colorClass){
     <div class="yn-hint"><span class="no">← Galat</span><span class="yes">Sahi →</span></div>
   `, colorClass);
 
-  let startX = 0, dx = 0, dragging = false, resolved = false;
+  let startX = 0, dx = 0, dragging = false, resolved = false, pointerId = null;
 
   function commit(userSaysCorrect){
     if (resolved) return;
@@ -172,16 +173,21 @@ function renderYesNo(q, colorClass){
     nextAfterDelay(950);
   }
 
-  const onDown = (e) => { dragging = true; card.classList.add('dragging'); startX = (e.touches ? e.touches[0].clientX : e.clientX); };
+  const onDown = (e) => {
+    dragging = true; pointerId = e.pointerId;
+    card.setPointerCapture(pointerId);
+    card.classList.add('dragging');
+    startX = e.clientX;
+  };
   const onMove = (e) => {
     if (!dragging) return;
-    const x = (e.touches ? e.touches[0].clientX : e.clientX);
-    dx = x - startX;
+    dx = e.clientX - startX;
     card.style.transform = `translateX(${dx}px) rotate(${dx / 18}deg)`;
   };
   const onUp = () => {
     if (!dragging) return;
     dragging = false; card.classList.remove('dragging');
+    try { card.releasePointerCapture(pointerId); } catch (e) {}
     if (dx > 90) commit(true);
     else if (dx < -90) commit(false);
     else { card.style.transform = 'translateX(0) rotate(0deg)'; }
@@ -190,7 +196,7 @@ function renderYesNo(q, colorClass){
   card.addEventListener('pointerdown', onDown);
   card.addEventListener('pointermove', onMove);
   card.addEventListener('pointerup', onUp);
-  card.addEventListener('pointerleave', onUp);
+  card.addEventListener('pointercancel', onUp);
 }
 
 // ---- choose_3 / hindi_to_english: tap the correct option ----
