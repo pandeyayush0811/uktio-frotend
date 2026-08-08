@@ -158,6 +158,42 @@ public class MicCapturePlugin extends Plugin {
         call.resolve();
     }
 
+    // ---- keep-alive across a full voice turn (recording + reply playback) ----
+    // See VoiceKeepAliveService for why this exists: without it, the screen
+    // locking mid-conversation freezes the app (Doze) and audio just stops,
+    // which is the exact "screen band karo to chat/awaaz ruk jaati hai" bug.
+    // Deliberately separate from start()/stop() above — recording can (and in
+    // practice-lite.html's live-turn flow, DOES) stop well before the
+    // reply's TTS audio has finished playing, so the JS side controls this
+    // window explicitly rather than it being implicitly tied to mic state.
+    @PluginMethod
+    public void startKeepAlive(PluginCall call) {
+        try {
+            android.content.Intent intent = new android.content.Intent(getContext(), VoiceKeepAliveService.class);
+            intent.setAction(VoiceKeepAliveService.ACTION_START);
+            androidx.core.content.ContextCompat.startForegroundService(getContext(), intent);
+            call.resolve();
+        } catch (Exception e) {
+            // Never let a keep-alive failure block the actual voice feature —
+            // worst case without it is back to the pre-fix screen-off behavior,
+            // not a broken call.
+            Log.e("MicCapturePlugin", "startKeepAlive failed", e);
+            call.resolve();
+        }
+    }
+
+    @PluginMethod
+    public void stopKeepAlive(PluginCall call) {
+        try {
+            android.content.Intent intent = new android.content.Intent(getContext(), VoiceKeepAliveService.class);
+            intent.setAction(VoiceKeepAliveService.ACTION_STOP);
+            getContext().startService(intent);
+        } catch (Exception e) {
+            Log.e("MicCapturePlugin", "stopKeepAlive failed", e);
+        }
+        call.resolve();
+    }
+
     private byte[] shortsToBytes(short[] shorts, int len) {
         byte[] bytes = new byte[len * 2];
         for (int i = 0; i < len; i++) {

@@ -5,6 +5,16 @@
 <uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+<!-- Screen-off voice fix: lets VoiceKeepAliveService keep the app alive
+     (mic + TTS playback) while the screen is locked. FOREGROUND_SERVICE_MICROPHONE
+     is required on Android 14+ (targetSdk 36 here) for a mic-type foreground
+     service, or the OS throws SecurityException at startForeground(). POST_NOTIFICATIONS
+     is required on Android 13+ to actually show the (mandatory) persistent notification. -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -28,6 +38,14 @@
             </intent-filter>
 
         </activity>
+
+        <!-- Screen-off voice fix: see VoiceKeepAliveService for details.
+             foregroundServiceType="microphone" pairs with FOREGROUND_SERVICE_MICROPHONE
+             above and is mandatory on Android 14+. exported=false — only this app starts it. -->
+        <service
+            android:name=".VoiceKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

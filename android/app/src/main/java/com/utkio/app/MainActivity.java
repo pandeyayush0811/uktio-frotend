@@ -14,6 +14,7 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
   private static final int MIC_PERMISSION_CODE = 1001;
+  private static final int NOTIF_PERMISSION_CODE = 1002;
   private PermissionRequest pendingWebRequest;
 
   @Override
@@ -35,6 +36,17 @@ public class MainActivity extends BridgeActivity {
             != PackageManager.PERMISSION_GRANTED) {
       ActivityCompat.requestPermissions(this,
               new String[]{Manifest.permission.RECORD_AUDIO}, MIC_PERMISSION_CODE);
+    }
+
+    // Screen-off voice fix: VoiceKeepAliveService's persistent notification
+    // needs this on Android 13+, or the OS silently shows nothing (the
+    // foreground service itself still runs fine either way — this is only
+    // about the notification being visible to the user).
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED) {
+      ActivityCompat.requestPermissions(this,
+              new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIF_PERMISSION_CODE);
     }
 
     this.bridge.getWebView().setWebChromeClient(new android.webkit.WebChromeClient() {

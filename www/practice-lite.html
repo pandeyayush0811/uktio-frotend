@@ -110,8 +110,25 @@ function runPracticeLite() {
   let isBusy = false;
   let audioCtx = null;
   let micListenerHandle = null;
-  let pcmChunks = []; // Uint8Array pieces of raw 16-bit PCM @ 16kHz from the native plugin
-  const PCM_SAMPLE_RATE = 16000; // must match MicCapturePlugin's output rate
+  let pcmChunks = []; // only used by the REST/SSE fallback path below
+  const PCM_SAMPLE_RATE = 16000; // must match MicCapturePlugin's output rate AND sarvamSttStreamClient.js's SAMPLE_RATE
+
+  // TOGGLE: true = stream audio live over WebSocket while recording (the
+  // latency fix — see sarvamSttStreamClient.js / LiveTtsSession).
+  // false = old behavior: record everything, THEN upload as one blob,
+  // THEN wait for the SSE response. Kept as a one-line rollback in case
+  // the live path needs more testing on real devices/networks before
+  // going to all users — TEST THE LIVE PATH FIRST (see the caveats in
+  // liteRoutes.js's handleLiveTurn about the STT WebSocket's exact
+  // message shapes not being confirmed byte-for-byte from this
+  // environment).
+  const USE_LIVE_WS = true;
+
+  function wsUrlFor(path) {
+    const httpUrl = new URL(path, window.UKTIO_CONFIG.BACKEND_URL);
+    httpUrl.protocol = httpUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+    return httpUrl.toString();
+  }
 
   function setStatus(text, kind) {
     statusText.textContent = text;
@@ -152,6 +169,16 @@ function runPracticeLite() {
   // each chunk to start exactly when the previous one ends, so sentences
   // play back-to-back with no gap and no need to wait for the whole reply.
   let nextPlayTime = 0;
+  // Defense-in-depth for the live WS path: audio_chunk messages carry an
+  // `index` (see handleLiveTurn in liteRoutes.js) but this file used to
+  // just play them in WHATEVER order they arrived over the socket. Now
+  // that the backend queues TTS per-sentence (see LiveTtsSession fix),
+  // they should already arrive in order — but the SSE path already does
+  // index-based ordering (audioResults/flushAudioQueue in liteRoutes.js),
+  // so mirror that same guarantee here for the live path too rather than
+  // trusting arrival order.
+  let nextAudioIndexToPlay = 0;
+  const pendingAudioByIndex = new Map();
 
   function base64ToArrayBuffer(base64) {
     const binary = atob(base64);
@@ -177,6 +204,37 @@ function runPracticeLite() {
     }
   }
 
+  // BUG FIX (this is what caused audio to play "middle sentence first,
+  // then last, then first" even though callers already invoke
+  // enqueueReplyAudioChunk() in strict index order):
+  // enqueueReplyAudioChunk() above is `async` and callers never awaited
+  // it (deliberately, per the old comment, so decoding chunk N doesn't
+  // block reading chunk N+1 off the network). But `decodeAudioData()`
+  // inside it is ALSO async and gives NO ordering guarantee — if chunk 1
+  // happens to finish decoding before chunk 0 (very possible: browsers
+  // don't decode in call order, and audio buffers are tiny/fast), then
+  // chunk 1's continuation runs first, reads the shared `nextPlayTime`
+  // while it's still small, and schedules itself EARLY. Chunk 0's
+  // continuation then runs, reads `nextPlayTime` AFTER chunk 1 already
+  // advanced it, and gets scheduled AFTER chunk 1. Net result: playback
+  // order becomes whatever order decodeAudioData() happened to resolve
+  // in that run — not the order sentences were spoken, and not even
+  // consistent between runs. This is a classic shared-mutable-state race
+  // across concurrent async calls.
+  // Fix: route every chunk through a local serial queue, same pattern as
+  // the backend's TtsLane queue. Decoding itself can still overlap
+  // (decodeAudioData for chunk N+1 can start while chunk N is still
+  // decoding — that part was never the problem), but the SCHEDULING
+  // step (reading/writing nextPlayTime + src.start()) now only ever runs
+  // for one chunk at a time, and always in the order chunks were queued
+  // — which callers already guarantee is index order.
+  let _playbackQueue = Promise.resolve();
+  function enqueueReplyAudioChunkOrdered(base64Data) {
+    const run = () => enqueueReplyAudioChunk(base64Data);
+    _playbackQueue = _playbackQueue.then(run, run);
+    return _playbackQueue;
+  }
+
   // ---- one-shot session bootstrap ----
   async function ensureSession() {
     if (sessionId) return sessionId;
@@ -196,6 +254,38 @@ function runPracticeLite() {
       throw new Error('MicCapture native plugin nahi mila — app ko native build se chalao (browser preview mein nahi chalega).');
     }
     return window.Capacitor.Plugins.MicCapture;
+  }
+
+  // ---- screen-off fix: keep the app process alive (foreground service +
+  // wakelock, see VoiceKeepAliveService.java) for the FULL turn — recording
+  // AND the reply's TTS playback. Deliberately spans longer than the mic
+  // itself: stopRecordingLive() stops the mic well before the reply audio
+  // is done playing, so keepAlive can't just be tied to mic start/stop.
+  // No-ops safely on non-native (browser preview) since MicCapture won't
+  // exist there anyway and getMicCapturePlugin() already guards other calls.
+  let keepAliveActive = false;
+  async function startKeepAlive() {
+    if (keepAliveActive) return;
+    keepAliveActive = true;
+    try { await getMicCapturePlugin().startKeepAlive(); } catch (e) { /* browser preview or plugin missing — ignore */ }
+  }
+  async function stopKeepAlive() {
+    if (!keepAliveActive) return;
+    keepAliveActive = false;
+    try { await getMicCapturePlugin().stopKeepAlive(); } catch (e) { /* ignore */ }
+  }
+  // Called once we know no more audio will be scheduled for this turn
+  // (after 'done'/'error', or on a hard failure) — waits for whatever's
+  // still queued in the AudioContext to actually finish playing before
+  // releasing the wakelock/foreground service, otherwise the tail end of
+  // the reply could get cut off by Doze the instant the turn "ends" server-side.
+  function stopKeepAliveAfterPlaybackSettles() {
+    const bufferMs = 400; // small cushion for scheduling/decode jitter
+    let delayMs = bufferMs;
+    if (audioCtx && nextPlayTime > audioCtx.currentTime) {
+      delayMs = (nextPlayTime - audioCtx.currentTime) * 1000 + bufferMs;
+    }
+    setTimeout(stopKeepAlive, Math.max(delayMs, bufferMs));
   }
 
   function base64ToUint8(base64) {
@@ -236,7 +326,144 @@ function runPracticeLite() {
     return uint8ToBase64(wavBytes);
   }
 
+  // ============================================================
+  // LIVE (WebSocket) PATH — streams audio to the server as it's
+  // captured, instead of buffering the whole recording and uploading it
+  // after the user stops. See handleLiveTurn in liteRoutes.js for the
+  // server side and the wire protocol comment there.
+  // ============================================================
+  let liveWs = null;
+
+  function connectLiveWs() {
+    return new Promise(async (resolve, reject) => {
+      const token = await getValidAccessToken();
+      const ws = new WebSocket(wsUrlFor('/lite/sessions/' + sessionId + '/live?token=' + encodeURIComponent(token || '')));
+      let settled = false;
+
+      ws.addEventListener('open', () => { /* wait for the server's own 'ready' message, not just the socket opening */ });
+      ws.addEventListener('message', (evt) => {
+        let msg;
+        try { msg = JSON.parse(evt.data); } catch (e) { return; }
+        if (msg.type === 'ready' && !settled) { settled = true; resolve(ws); return; }
+        handleLiveMessage(msg);
+      });
+      ws.addEventListener('error', () => {
+        if (!settled) { settled = true; reject(new Error('Connection failed')); }
+      });
+      ws.addEventListener('close', () => {
+        if (!settled) { settled = true; reject(new Error('Connection closed before ready')); }
+        if (liveWs === ws) liveWs = null;
+      });
+    });
+  }
+
+  let liveModelLine = null; // this turn's growing assistant bubble, live path
+
+  function handleLiveMessage(msg) {
+    if (msg.type === 'user_text') {
+      addLine('user', msg.text);
+      liveModelLine = null;
+    } else if (msg.type === 'reply_sentence') {
+      if (!liveModelLine) liveModelLine = addLine('model', '');
+      liveModelLine.textContent += (liveModelLine.textContent ? ' ' : '') + msg.text;
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+      setStatus('Bol raha hoon...', 'busy');
+    } else if (msg.type === 'audio_chunk') {
+      // Index-ordered playback, same principle as flushAudioQueue() on
+      // the SSE path — even though the backend now sends these in order,
+      // don't rely on network/socket delivery order for correctness.
+      pendingAudioByIndex.set(msg.index, msg.audio_base64);
+      while (pendingAudioByIndex.has(nextAudioIndexToPlay)) {
+        const data = pendingAudioByIndex.get(nextAudioIndexToPlay);
+        pendingAudioByIndex.delete(nextAudioIndexToPlay);
+        enqueueReplyAudioChunkOrdered(data); // ordered+serialized, see the fix comment above
+        nextAudioIndexToPlay++;
+      }
+    } else if (msg.type === 'done') {
+      setStatus('Mic dabao aur bolna shuru karo', null);
+      isBusy = false;
+      micBtn.disabled = false;
+      liveModelLine = null;
+      nextAudioIndexToPlay = 0;
+      pendingAudioByIndex.clear();
+      stopKeepAliveAfterPlaybackSettles();
+    } else if (msg.type === 'error') {
+      console.error('Live turn error:', msg.error);
+      setStatus('Error: ' + msg.error, 'err');
+      isBusy = false;
+      micBtn.disabled = false;
+      liveModelLine = null;
+      nextAudioIndexToPlay = 0;
+      pendingAudioByIndex.clear();
+      stopKeepAliveAfterPlaybackSettles();
+    }
+  }
+
+  async function startRecordingLive() {
+    if (isRecording || isBusy) return;
+    isBusy = true;
+    micBtn.disabled = true;
+    try {
+      await startKeepAlive(); // before anything else — covers session setup, recording, and reply playback below
+      await ensureSession();
+      liveWs = await connectLiveWs();
+      const MicCapture = getMicCapturePlugin();
+      micListenerHandle = await MicCapture.addListener('audioChunk', (data) => {
+        if (!data || !data.audio || !liveWs || liveWs.readyState !== WebSocket.OPEN) return;
+        // data.audio is ALREADY base64-encoded raw 16-bit PCM straight
+        // from the native plugin — forward it as-is, no decode/re-encode
+        // round trip needed (that round trip only existed before to
+        // merge chunks into one WAV for the old buffer-then-upload path).
+        liveWs.send(JSON.stringify({ type: 'audio_chunk', data: data.audio }));
+      });
+      await MicCapture.start();
+      isRecording = true;
+      micBtn.classList.add('recording');
+      setStatus('Sun raha hoon... (rokne ke liye mic dabao)', 'live');
+    } catch (err) {
+      console.error(err);
+      setStatus('Mic access nahi mila: ' + err.message, 'err');
+      if (liveWs) { try { liveWs.close(); } catch (e) {} liveWs = null; }
+      stopKeepAlive(); // setup failed before any turn could send its own done/error — nothing else will release this
+    } finally {
+      isBusy = false;
+      micBtn.disabled = false;
+    }
+  }
+
+  async function stopRecordingLive() {
+    if (!isRecording) return;
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    try {
+      const MicCapture = getMicCapturePlugin();
+      await MicCapture.stop();
+    } catch (e) { /* ignore */ }
+    if (micListenerHandle) { try { await micListenerHandle.remove(); } catch (e) {} micListenerHandle = null; }
+
+    isBusy = true;
+    micBtn.disabled = true;
+    setStatus('Samajh raha hoon...', 'busy');
+    if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+      liveWs.send(JSON.stringify({ type: 'stop' }));
+      // Server closes the socket itself once 'done'/'error' has been
+      // sent (see handleLiveTurn) — isBusy/micBtn get re-enabled from
+      // handleLiveMessage's 'done'/'error' branches above, not here.
+    } else {
+      setStatus('Connection lost — phir try karo', 'err');
+      isBusy = false;
+      micBtn.disabled = false;
+      stopKeepAlive(); // socket was already dead — no 'done'/'error' message is coming to release this otherwise
+    }
+  }
+
+  // ============================================================
+  // OLD (REST/SSE) PATH — record everything, then upload, then wait.
+  // Kept intact as a rollback (USE_LIVE_WS = false) — not touched from
+  // its prior working version.
+  // ============================================================
   async function startRecording() {
+    if (USE_LIVE_WS) return startRecordingLive();
     if (isRecording || isBusy) return;
     isBusy = true;
     micBtn.disabled = true;
@@ -262,6 +489,7 @@ function runPracticeLite() {
   }
 
   async function stopRecording() {
+    if (USE_LIVE_WS) return stopRecordingLive();
     if (!isRecording) return;
     isRecording = false;
     micBtn.classList.remove('recording');
@@ -356,7 +584,11 @@ function runPracticeLite() {
             // one's decode+schedule, which defeats the point of
             // streaming. enqueueReplyAudioChunk's own nextPlayTime
             // bookkeeping keeps playback order correct regardless.
-            enqueueReplyAudioChunk(payload.audio_base64);
+            // Same decode-race fix as the live WS path — the SSE route
+            // already delivers audio_chunk events in index order
+            // server-side, but decodeAudioData() resolving out of call
+            // order client-side can still scramble playback without this.
+            enqueueReplyAudioChunkOrdered(payload.audio_base64);
           } else if (eventName === 'done') {
             setStatus('Mic dabao aur bolna shuru karo', null);
           } else if (eventName === 'error') {

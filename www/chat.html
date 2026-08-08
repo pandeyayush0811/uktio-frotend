@@ -57,6 +57,28 @@
   .mic-btn.active svg{color:#fff;}
 
   footer{margin-top:16px;color:var(--ink-dim);font-size:0.72rem;line-height:1.6;text-align:center;visibility:hidden;}
+
+  /* Report affordance directly on the chat page — see, generate, or (once
+     generated) the locked notice, all without a trip through History. */
+  .report-pill{
+    display:none; align-items:center; gap:6px; margin:0 auto 14px; padding:8px 14px;
+    border-radius:999px; border:1.5px solid var(--accent-orange); color:var(--accent-orange);
+    background:transparent; font-weight:700; font-size:0.82rem; cursor:pointer; font-family:inherit;
+    width:fit-content;
+  }
+  .report-pill.show{ display:flex; }
+  .locked-banner{
+    display:none; flex-direction:column; align-items:center; gap:10px; text-align:center;
+    padding:16px 18px; margin-bottom:14px; border-radius:16px;
+    background:var(--panel-2); color:var(--ink-dim); font-size:0.85rem; line-height:1.5;
+  }
+  .locked-banner.show{ display:flex; }
+  .locked-banner .locked-actions{ display:flex; gap:10px; }
+  .locked-banner button{
+    padding:9px 16px; border-radius:10px; border:1.5px solid var(--accent); background:transparent;
+    color:var(--accent); font-weight:700; font-size:0.82rem; cursor:pointer; font-family:inherit;
+  }
+  .locked-banner button.primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
 </style>
 </head>
 <body>
@@ -74,6 +96,16 @@
   <div class="status-row">
     <div class="dot" id="statusDot"></div>
     <span id="statusText">Shuru karne ke liye niche mic button dabao</span>
+  </div>
+
+  <button class="report-pill" id="reportPill" type="button"></button>
+
+  <div class="locked-banner" id="lockedBanner">
+    <span>Iss chat ka report ban chuka hai — is chat mein aage baat nahi ho sakti.</span>
+    <div class="locked-actions">
+      <button class="primary" id="lockedSeeReport" type="button">📊 Report dekho</button>
+      <button id="lockedNewChat" type="button">+ Naya chat</button>
+    </div>
   </div>
 
   <div class="chat-card">
@@ -340,6 +372,32 @@ const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const transcriptEl = document.getElementById('transcript');
 const waveEl = document.getElementById('wave');
+const reportPill = document.getElementById('reportPill');
+const lockedBanner = document.getElementById('lockedBanner');
+
+// Same threshold History uses to decide when a chat is "long enough" to
+// analyze (chatRoutes.js's MIN_TURNS_FOR_ANALYSIS) — duplicated here since
+// this is a static frontend file with no shared-constants import path to
+// the backend. Keep these two in sync if it's ever tuned.
+const MIN_TURNS_FOR_ANALYSIS = 10;
+
+let isLocked = false; // true once this resumed session already has a report — blocks further recording
+let knownTurnCount = 0; // running count for THIS session, seeded from resume data below, incremented locally as turns sync — avoids an extra network round-trip just to re-check the report-eligibility threshold after every save
+
+function showReportPill(sessionId, hasReport){
+  reportPill.textContent = hasReport ? '📊 Report dekho' : '📊 Report banao';
+  reportPill.onclick = () => { window.location.href = 'report.html?session=' + sessionId + (hasReport ? '' : '&generate=1'); };
+  reportPill.classList.add('show');
+}
+
+function lockChatForReport(sessionId){
+  isLocked = true;
+  lockedBanner.classList.add('show');
+  document.getElementById('lockedSeeReport').onclick = () => { window.location.href = 'report.html?session=' + sessionId; };
+  document.getElementById('lockedNewChat').onclick = () => { window.location.href = 'chat.html'; };
+  micBtn.disabled = true;
+  setStatus('Iss chat ka report ban chuka hai.', null);
+}
 
 /* API key ab is page ke saath store nahi hoti — Settings page (settings.html)
    isi localStorage key mein save karta hai, hum yahan sirf padhte hain. */
@@ -433,6 +491,20 @@ async function loadResumeContextIfAny(){
       const full = msgs.map(m => (m.role === 'user' ? 'User' : 'Bolo') + ': ' + m.content).join('\n');
       priorTranscriptText = full.length > 6000 ? full.slice(full.length - 6000) : full;
     }
+
+    // Report affordance right here on the chat page (see file header note
+    // in history.html for the same "Generate" vs "See report" logic) —
+    // and the hard lock once a report already exists for this session
+    // (see the matching 409 check server-side, POST /chat/sessions).
+    const turnCount = (data.session && data.session.turn_count) || 0;
+    knownTurnCount = turnCount;
+    if (data.has_report){
+      lockChatForReport(activeSessionId);
+      return; // don't overwrite the locked status message below
+    } else if (turnCount >= MIN_TURNS_FOR_ANALYSIS){
+      showReportPill(activeSessionId, false);
+    }
+
     setStatus('Shuru karne ke liye niche mic button dabao.', null);
   } catch(err){
     console.warn('resume context load failed, starting fresh instead', err);
@@ -569,6 +641,23 @@ function getMicCapturePlugin(){
   return window.Capacitor.Plugins.MicCapture;
 }
 
+// ---- screen-off fix: keep the app process alive (foreground service +
+// wakelock, see VoiceKeepAliveService.java) for the whole live session —
+// this session's mic stays open continuously and playback happens
+// interleaved with it (see isModelSpeaking), so unlike practice-lite.html's
+// per-turn flow, tying this to session start/stop (below) is sufficient.
+let keepAliveActive = false;
+async function startKeepAlive(){
+  if (keepAliveActive) return;
+  keepAliveActive = true;
+  try{ await getMicCapturePlugin().startKeepAlive(); }catch(e){ /* browser preview or plugin missing — ignore */ }
+}
+async function stopKeepAlive(){
+  if (!keepAliveActive) return;
+  keepAliveActive = false;
+  try{ await getMicCapturePlugin().stopKeepAlive(); }catch(e){ /* ignore */ }
+}
+
 async function startNativeMic(){
   const MicCapture = getMicCapturePlugin();
 
@@ -599,6 +688,7 @@ async function stopNativeMic(){
 
 async function startSession(){
   if (session || isBusy) return;
+  if (isLocked){ setStatus('Iss chat ka report ban chuka hai — naya chat shuru karo.', 'err'); return; }
 
   // Do NOT reset sessionTurns/currentTurnIndex here — if the user stops
   // the mic and taps it again without leaving this page, we want THIS
@@ -616,6 +706,7 @@ async function startSession(){
 
   isBusy = true;
   micBtn.disabled = true;
+  await startKeepAlive(); // before connect — covers the whole session below, mic + playback both
 
   setStatus('Gemini se connect ho raha hai...', null);
   try{
@@ -678,6 +769,7 @@ async function startSession(){
     setStatus(describeConnectError(err), 'err');
     micBtn.disabled = false;
     isBusy = false;
+    stopKeepAlive(); // connect itself failed — no session was ever created, so stopSession() never runs to release this
   }
 }
 
@@ -724,6 +816,7 @@ function handleMessage(msg){
 }
 
 function stopSession(silent){
+  stopKeepAlive();
   stopNativeMic().catch((e) => console.error('stopNativeMic error', e));
 
   stopPlayback();
@@ -761,7 +854,16 @@ async function finalizeAndSyncSession(){
   }
 
   const syncedSessionId = await syncPendingChatSession();
-  if (syncedSessionId) activeSessionId = syncedSessionId;
+  if (syncedSessionId){
+    activeSessionId = syncedSessionId;
+    // Just-finished turns synced successfully — check if this session now
+    // crosses the report threshold, and if so surface the pill immediately
+    // instead of making the user go find it in History.
+    knownTurnCount += sessionTurns.length;
+    if (!isLocked && !reportPill.classList.contains('show') && knownTurnCount >= MIN_TURNS_FOR_ANALYSIS){
+      showReportPill(activeSessionId, false);
+    }
+  }
 
   sessionTurns = [];
   currentTurnIndex = -1;

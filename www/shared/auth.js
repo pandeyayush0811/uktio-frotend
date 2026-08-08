@@ -208,6 +208,19 @@ export async function syncPendingChatSession() {
     try { localStorage.removeItem(PENDING_CHAT_SESSION_KEY); } catch (_) { /* ignore */ }
     return result.session_id || null;
   } catch (err) {
+    // 409 = session locked (its report was already generated — see the
+    // resume-mode check in chatRoutes.js). This is a TERMINAL failure, not
+    // a "try again later" one: the server will refuse this exact payload
+    // forever, so retrying on every future app-open would just loop
+    // silently forever. Drop it instead. In practice this shouldn't happen
+    // — chat.html's own lock (has_report) stops the user from generating
+    // new turns for a reported session before this ever fires — but this
+    // is the backstop for whatever stale-state path got here anyway.
+    if (err.status === 409) {
+      console.warn('pending chat session was locked (report already generated) — discarding instead of retrying', err);
+      try { localStorage.removeItem(PENDING_CHAT_SESSION_KEY); } catch (_) { /* ignore */ }
+      return null;
+    }
     // Still unreachable/still failing — leave it in place, we'll retry
     // on the next app open. Never throw from here; this must stay silent.
     console.warn('pending chat session sync failed, will retry later', err);
